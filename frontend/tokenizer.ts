@@ -1,0 +1,223 @@
+// Vị trí của một ký tự trong code
+interface Position {
+    line: number;
+    column: number; // Vị trí trong line hiện tại, reset về 1 khi xuống line mới
+    index: number; // Vị trí trong toàn bộ program string
+}
+
+// Điểm bắt đầu và kết thúc của một token, có tác dụng để highlight về sau
+interface TokenLocation {
+    start: Position;
+    end: Position;
+}
+
+// Bất cứ token nào đều có vị trí của nó
+interface BaseToken {
+    location: TokenLocation;
+}
+
+type KeywordType = 'if' | 'else' | 'while' | 'true' | 'false' | 'null' | 'fn' | 'return';
+interface KeywordToken extends BaseToken {
+    type: KeywordType;
+}
+
+interface IdentifierToken extends BaseToken {
+    type: 'identifier';
+    value: string;
+}
+
+interface StringToken extends BaseToken {
+    type: 'string';
+    value: string;
+}
+
+interface NumberToken extends BaseToken {
+    type: 'number';
+    value: number;
+}
+
+// prettier-ignore
+type SymbolType = '(' | ')' | '[' | ']' | '{' | '}' | '.' | ',' | '+' | '-' | '*' | '/' | '%' | '&&' | '||' | '!' | '<' | '>' | '=' | '<=' | '>=' | '==' | '!=' | ';' | ':';
+interface SymbolToken extends BaseToken {
+    type: SymbolType;
+}
+
+interface EOFToken extends BaseToken {
+    type: 'EOF';
+}
+
+type TokenType = KeywordType | 'identifier' | 'string' | 'number' | SymbolType | 'EOF';
+type Token = KeywordToken | IdentifierToken | StringToken | NumberToken | SymbolToken | EOFToken;
+
+const keywords = new Set(['if', 'else', 'while', 'true', 'false', 'null', 'fn', 'return']);
+function isKeyword(s: string): s is KeywordType {
+    // Nếu function này trả về true, thì hãy tin rằng s lúc này có type là KeywordType
+    return keywords.has(s);
+}
+
+const alpha = new Set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ');
+function isAlpha(c: string) {
+    return alpha.has(c);
+}
+
+const digit = new Set('0123456789');
+function isDigit(c: string) {
+    return digit.has(c);
+}
+
+function isAlphaNumeric(c: string) {
+    return isAlpha(c) || isDigit(c);
+}
+
+// prettier-ignore
+const oneCharSymbols = new Set(['(', ')', '[', ']', '{', '}', '.', ',', '+', '-', '*', '/', '%', '!', '<', '>', '=', ';', ':']);
+function isOneCharSymbol(c: string) {
+    return oneCharSymbols.has(c);
+}
+
+const twoCharSymbols = new Set(['<=', '>=', '==', '!=', '&&', '||']);
+function isTwoCharSymbol(c: string) {
+    return twoCharSymbols.has(c);
+}
+
+// Con trỏ để Tokenizer biết nó đang đọc đến đâu trong code
+class Incrementer {
+    // private - chỉ class Incrementer được đọc và ghi position, bên ngoài không thể làm incrementer.position.index = 999 để nhảy con trỏ tùy tiện - mọi thay đổi phải đi qua advance() và newline() (encapsulation)
+    // readonly - this.position không thể bị gán thành object khác hoàn toàn, các field bên trong vẫn có thể thay đổi
+    private readonly position: Position = { line: 1, column: 1, index: 0 };
+
+    // Di chuyển con trỏ tiến lên một ký tự
+    advance() {
+        this.position.index++;
+        this.position.column++;
+    }
+
+    // Gọi để xuống line mới khi gặp ký tự \n
+    newline() {
+        this.position.line++;
+        this.position.column = 1;
+    }
+
+    // Trả về copy của position hiện tại
+    snapshot() {
+        return { ...this.position }; // Tạo một object mới với tất cả fields được copy sang (shallow copy)
+    }
+
+    // Tokenizer cần index để biết đang trỏ vào kí tự nào nhưng position là private
+    // Method này để expose index mà không expose cả object position
+    index(): number {
+        return this.position.index;
+    }
+}
+
+class Tokenizer {
+    private readonly program: string; // Source code gốc, đọc từ đầu đến cuối, ko thay đổi
+    private readonly incrementer: Incrementer = new Incrementer(); // Con trỏ để xem Tokenizer đang đọc tới đâu
+
+    constructor(program: string) {
+        this.program = program;
+    }
+
+    tokenize() {
+        const tokens: Token[] = [];
+
+        // Đọc từng ký tự cho đến khi hết source code
+        while (this.incrementer.index() < this.program.length) {
+            const currentCharacter = this.program[this.incrementer.index()];
+            const nextCharacter = this.program[this.incrementer.index() + 1];
+
+            // Bắt đầu bằng chữ cái - có thể là identifier hoặc keyword
+            if (isAlpha(currentCharacter)) {
+                tokens.push(this.identifierOrKeyword());
+                continue;
+            }
+
+            // Bắt đầu bằng chữ số - number literal
+            // if (isDigit(currentCharacter)) {
+            //     tokens.push(this.number());
+            //     continue;
+            // }
+
+            // Dấu nháy kép - string literal
+            // if (currentCharacter === '"') {
+            //     tokens.push(this.string());
+            //     continue;
+            // }
+
+            // Nhìn 2 ký tự cùng lúc - phải check trước oneCharSymbol
+            // if (isTwoCharSymbol(`${currentCharacter}${nextCharacter}`)) {
+            //     tokens.push(this.twoCharSymbol());
+            //     continue;
+            // }
+
+            // if (isOneCharSymbol(`${currentCharacter}`)) {
+            //     tokens.push(this.oneCharSymbol());
+            //     continue;
+            // }
+
+            // Khoảng trắng - bỏ qua, chỉ advance con trỏ
+            if (currentCharacter === ' ') {
+                this.incrementer.advance();
+                continue;
+            }
+
+            // Xuống dòng - advance con trỏ và reset column về 1
+            if (currentCharacter === '\n') {
+                this.incrementer.advance();
+                this.incrementer.newline();
+                continue;
+            }
+
+            throw new Error(`Unexpected character: ${currentCharacter}`);
+        }
+
+        // Luôn kết thúc bằng EOF để Parser biết đã hết input
+        tokens.push({
+            type: 'EOF',
+            location: { start: this.incrementer.snapshot(), end: this.incrementer.snapshot() },
+        });
+
+        return tokens;
+    }
+
+    identifierOrKeyword(): IdentifierToken | KeywordToken {
+        const startToken = this.incrementer.snapshot();
+        let token = '';
+
+        // Đọc liên tục chừng nào còn là chữ cái hoặc chữ số
+        // Ví dụ: "myVar123" đọc hết, dừng khi gặp space hoặc symbol
+        while (isAlphaNumeric(this.program[this.incrementer.index()])) {
+            token += this.program[this.incrementer.index()];
+            this.incrementer.advance();
+        }
+
+        const endToken = this.incrementer.snapshot();
+
+        // Kiểm tra chuỗi vừa đọc có nằm trong danh sách keywords không
+        // Nếu có - KeywordToken (type chính là keyword đó, không cần value riêng)
+        // Nếu không - IdentifierToken (tên do người dùng đặt, lưu vào value)
+        if (isKeyword(token))
+            return {
+                type: token,
+                location: { start: startToken, end: endToken },
+            };
+
+        return {
+            type: 'identifier',
+            value: token,
+            location: { start: startToken, end: endToken },
+        };
+    }
+
+    // number(): NumberToken {
+    //     this.incrementer.advance();
+    // }
+
+    // string(): StringToken {
+    //     this.incrementer.advance();
+    // }
+
+    // twoCharSymbol(): SymbolToken {}
+
+    // oneCharSymbol(): SymbolToken {}
+}
