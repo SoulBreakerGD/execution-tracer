@@ -6,7 +6,7 @@ interface Position {
 }
 
 // Điểm bắt đầu và kết thúc của một token, có tác dụng để highlight về sau
-interface TokenLocation {
+export interface TokenLocation {
     start: Position;
     end: Position;
 }
@@ -47,7 +47,7 @@ interface EOFToken extends BaseToken {
 }
 
 type TokenType = KeywordType | 'identifier' | 'string' | 'number' | SymbolType | 'EOF';
-type Token = KeywordToken | IdentifierToken | StringToken | NumberToken | SymbolToken | EOFToken;
+export type Token = KeywordToken | IdentifierToken | StringToken | NumberToken | SymbolToken | EOFToken;
 
 const keywords = new Set(['if', 'else', 'while', 'true', 'false', 'null', 'fn', 'return']);
 function isKeyword(s: string): s is KeywordType {
@@ -195,7 +195,7 @@ class Tokenizer {
 
         // Kiểm tra chuỗi vừa đọc có nằm trong danh sách keywords không
         // Nếu có - KeywordToken (type chính là keyword đó, không cần value riêng)
-        // Nếu không - IdentifierToken (tên do người dùng đặt, lưu vào value)
+        // Nếu không - IdentifierToken (tên biến hoặc function do người dùng đặt, lưu vào value)
         if (isKeyword(token))
             return {
                 type: token,
@@ -241,19 +241,13 @@ class Tokenizer {
         let token = '';
 
         this.incrementer.advance(); // Bỏ qua dấu " mở
-        while (
-            this.incrementer.index() < this.program.length &&
-            this.program[this.incrementer.index()] !== '"'
-        ) {
+        while (this.incrementer.index() < this.program.length && this.program[this.incrementer.index()] !== '"') {
             token += this.program[this.incrementer.index()];
             this.incrementer.advance();
         }
 
         // Edge case: Nếu không có dấu " đóng, vòng lặp sẽ chạy vượt qua program.length
-        if (
-            this.incrementer.index() >= this.program.length ||
-            this.program[this.incrementer.index()] !== '"'
-        ) {
+        if (this.incrementer.index() >= this.program.length || this.program[this.incrementer.index()] !== '"') {
             throw new Error(`Unterminated string at line ${startToken.line}`);
         }
 
@@ -298,8 +292,8 @@ class Tokenizer {
     }
 }
 
-// Con trỏ đọc Array token
-class TokenManager {
+// Con trỏ để Parser đọc Array token cho việc build AST
+export class TokenManager {
     private readonly tokens: Array<Token> = [];
     private index = 0; // Track vị trí trong Array token
 
