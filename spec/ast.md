@@ -17,8 +17,8 @@ Các loại node trong AST:
 
 - Literal nodes - giá trị cụ thể, không có child: NumberLiteral(42), StringLiteral("hello"), BooleanLiteral(true)
 - Expression nodes - có child là các expressions khác:
-    - BinaryExpression(left, operator, right) `1 + 2, x \* y`
-    - UnaryExpression(operator, operand) `!true -x`
+    - BinaryExpression(left, operator, right) `1 + 2, x * y`
+    - UnaryExpression(operator, operand) `!true, -x`
     - CallExpression(callee, arguments[]) `add(1, 2)`
 - Statement nodes - các câu lệnh hoàn chỉnh:
     - LetStatement(name, value) `let x = 42`

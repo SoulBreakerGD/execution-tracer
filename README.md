@@ -2,32 +2,24 @@
 
 A custom programming language interpreter with step-by-step execution visualization, built from scratch in TypeScript and React.
 
-> 🚧 **In progress** — Tokenizer is in progress. Parser, Interpreter, and Visualizer UI coming next.
-
----
-
-## What is this?
-
-Execution Tracer is an interpreter for a custom language, built without any parser/compiler libraries. The goal is to understand how programming languages work under the hood — from raw source code to visual execution.
-
-When complete, you'll be able to write code in Execution Tracer's language and watch it execute step by step: seeing variable states, call stacks, and scope changes in real time.
+> 🚧 **In progress** — Tokenizer and TokenManager complete. Parser and beyond coming next.
 
 ---
 
 ## How it works
-
-Source code goes through three stages:
 
 ```
 Source code (string)
       ↓
   Tokenizer       → breaks raw text into typed tokens with position info
       ↓
-  Parser          → builds an Abstract Syntax Tree (AST) from tokens  [upcoming]
+  TokenManager    → cursor interface for Parser to consume tokens safely
       ↓
-  Interpreter     → walks the AST, executes the program step by step  [upcoming]
+  Parser          → builds an Abstract Syntax Tree (AST) from tokens       [upcoming]
       ↓
-  Visualizer UI   → React interface to inspect each execution step     [upcoming]
+  Interpreter     → walks the AST, executes the program step by step       [upcoming]
+      ↓
+  Visualizer UI   → React interface to inspect each execution step          [upcoming]
 ```
 
 ---
@@ -96,7 +88,7 @@ Supports: variables, functions, closures, recursion, conditionals, loops, arrays
 
 ## Tech stack
 
-- **TypeScript** — strict typing throughout, discriminated union types for the token system
+- **TypeScript** — strict typing throughout; discriminated union types for the token system
 - **React** — step-by-step execution visualizer (upcoming)
 
 No parser generator libraries (e.g. ANTLR, PEG.js). Everything is hand-written.
@@ -106,26 +98,43 @@ No parser generator libraries (e.g. ANTLR, PEG.js). Everything is hand-written.
 ## Current progress
 
 ### ✅ Tokenizer
+
 Converts raw source code into a typed token array. Each token carries:
+
 - `type` — what kind of token it is (`'if'`, `'identifier'`, `'+'`, `'number'`, ...)
 - `value` — the runtime value for identifiers, strings, and numbers
 - `location` — `{ start, end }` with `line`, `column`, `index` for each position
 
 Handles: keywords, identifiers, number literals (including decimals), string literals, one/two-character symbols, whitespace, newlines, and unexpected character errors.
 
+### ✅ TokenManager
+
+A cursor interface that Parser uses to consume the token array safely. Exposes two operations:
+
+- **`peek()`** — returns the current token without advancing. Parser calls this to decide which grammar rule to apply next.
+- **`eat(expectedType)`** — validates that the current token matches the expected type, advances the cursor, and returns the token. Throws a descriptive syntax error on mismatch (e.g. `Expected '(' but got 'identifier'`).
+
+`eat()` accepts either a single type or an array of types — useful when the Parser can accept multiple valid tokens at a given position. Unlike some implementations that make the expected type optional, requiring it explicitly here prevents silent failures and makes grammar expectations visible at every call site.
+
+### 🔲 AST node types
+
 ### 🔲 Parser
-### 🔲 Interpreter  
+
+### 🔲 Interpreter
+
 ### 🔲 Visualizer UI
 
 ---
 
 ## Design decisions
 
-**Discriminated union types for tokens** — instead of a single `Token` interface with an optional `value` field, each token variant is its own interface (`KeywordToken`, `IdentifierToken`, `NumberToken`, ...) unified under a `Token` union type. TypeScript narrows the type correctly at every check point.
+**Discriminated union types for tokens** — each token variant is its own interface (`KeywordToken`, `IdentifierToken`, `NumberToken`, ...) unified under a `Token` union type. TypeScript narrows correctly at every check, so accessing `.value` on a `NumberToken` is type-safe without casting.
 
-**String literal types over enums** — token types are the actual characters and keywords (`'+'`, `'if'`, `'identifier'`) rather than enum members (`PLUS`, `IF`, `IDENTIFIER`). This removes the need for a mapping layer and makes the code self-documenting.
+**String literal types over enums** — token types are the actual characters and keywords (`'+'`, `'if'`, `'identifier'`) rather than enum members (`PLUS`, `IF`, `IDENTIFIER`). This removes a mapping layer and makes the token system self-documenting.
 
-**Incrementer class** — position tracking (line, column, index) is extracted into its own class with a controlled interface: `advance()`, `newline()`, and `snapshot()`. `snapshot()` returns a shallow copy to prevent position references from being mutated after the fact.
+**Incrementer class** — position tracking (line, column, index) is extracted into its own class. `snapshot()` returns a shallow copy of the current position so that token locations are not mutated as the cursor advances.
+
+**Required expected type in `eat()`** — making the expected type non-optional means every call site explicitly declares what token it expects. This makes grammar rules readable in code and produces clear error messages when source code doesn't match.
 
 ---
 
@@ -142,4 +151,4 @@ npm run dev
 
 ## Motivation
 
-This project is a deliberate exercise in building something from first principles — understanding what a framework or runtime actually does before relying on one. Every part of the pipeline (tokenizing, parsing, evaluating) is written by hand to make the internals visible and understandable.
+This project is an exercise in building from first principles — understanding what a language runtime actually does before relying on one. Every stage of the pipeline is written by hand to make the internals visible and understandable.

@@ -104,7 +104,7 @@ class Incrementer {
     }
 
     // Tokenizer cần index để biết đang trỏ vào kí tự nào nhưng position là private
-    // Method này để expose index mà không expose cả object position
+    // Method này để expose index mà không expose cả object.position
     index(): number {
         return this.position.index;
     }
@@ -295,5 +295,31 @@ class Tokenizer {
             type: token as SymbolType,
             location: { start: startToken, end: endToken },
         };
+    }
+}
+
+// Con trỏ đọc Array token
+class TokenManager {
+    private readonly tokens: Array<Token> = [];
+    private index = 0; // Track vị trí trong Array token
+
+    constructor(tokens: Array<Token>) {
+        this.tokens = tokens;
+    }
+
+    // Chỉ nhìn vào token vị trí hiện tại rồi return
+    peek(): Token {
+        return this.tokens[this.index];
+    }
+
+    // Kiểm tra token vị trí hiện tại có phải type thằng eat() đang mong đợi hay không, nếu có thì return token đó, không thì ném lỗi
+    eat(expectedType: TokenType | TokenType[]): Token {
+        const token = this.tokens[this.index];
+        const expectedTypes = Array.isArray(expectedType) ? expectedType : [expectedType]; // Thống nhất thành một Array có 1 hoặc nhiều phần tử
+
+        if (expectedTypes.includes(token.type)) {
+            this.index++;
+            return token;
+        } else throw new Error(`Expected ${expectedTypes.join(', ')} but got '${token.type}'`);
     }
 }
