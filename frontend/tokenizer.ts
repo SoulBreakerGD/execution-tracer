@@ -133,27 +133,27 @@ class Tokenizer {
             }
 
             // Bắt đầu bằng chữ số - number literal
-            // if (isDigit(currentCharacter)) {
-            //     tokens.push(this.number());
-            //     continue;
-            // }
+            if (isDigit(currentCharacter)) {
+                tokens.push(this.number());
+                continue;
+            }
 
-            // Dấu nháy kép - string literal
-            // if (currentCharacter === '"') {
-            //     tokens.push(this.string());
-            //     continue;
-            // }
+            // Bắt đầu bằng dấu nháy kép - string literal
+            if (currentCharacter === '"') {
+                tokens.push(this.string());
+                continue;
+            }
 
             // Nhìn 2 ký tự cùng lúc - phải check trước oneCharSymbol
-            // if (isTwoCharSymbol(`${currentCharacter}${nextCharacter}`)) {
-            //     tokens.push(this.twoCharSymbol());
-            //     continue;
-            // }
+            if (isTwoCharSymbol(`${currentCharacter}${nextCharacter}`)) {
+                tokens.push(this.twoCharSymbol());
+                continue;
+            }
 
-            // if (isOneCharSymbol(`${currentCharacter}`)) {
-            //     tokens.push(this.oneCharSymbol());
-            //     continue;
-            // }
+            if (isOneCharSymbol(`${currentCharacter}`)) {
+                tokens.push(this.oneCharSymbol());
+                continue;
+            }
 
             // Khoảng trắng - bỏ qua, chỉ advance con trỏ
             if (currentCharacter === ' ') {
@@ -209,15 +209,91 @@ class Tokenizer {
         };
     }
 
-    // number(): NumberToken {
-    //     this.incrementer.advance();
-    // }
+    number(): NumberToken {
+        const startToken = this.incrementer.snapshot();
+        let token = '';
+        let hasDecimal = false;
 
-    // string(): StringToken {
-    //     this.incrementer.advance();
-    // }
+        // Chỉ kiểm tra 1 lần xem token này đã có dấu . chưa
+        while (
+            isDigit(this.program[this.incrementer.index()]) ||
+            (this.program[this.incrementer.index()] === '.' && !hasDecimal)
+        ) {
+            if (this.program[this.incrementer.index()] === '.') {
+                hasDecimal = true;
+            }
 
-    // twoCharSymbol(): SymbolToken {}
+            token += this.program[this.incrementer.index()];
+            this.incrementer.advance();
+        }
 
-    // oneCharSymbol(): SymbolToken {}
+        const endToken = this.incrementer.snapshot();
+
+        return {
+            type: 'number',
+            value: Number(token),
+            location: { start: startToken, end: endToken },
+        };
+    }
+
+    string(): StringToken {
+        const startToken = this.incrementer.snapshot();
+        let token = '';
+
+        this.incrementer.advance(); // Bỏ qua dấu " mở
+        while (
+            this.incrementer.index() < this.program.length &&
+            this.program[this.incrementer.index()] !== '"'
+        ) {
+            token += this.program[this.incrementer.index()];
+            this.incrementer.advance();
+        }
+
+        // Edge case: Nếu không có dấu " đóng, vòng lặp sẽ chạy vượt qua program.length
+        if (
+            this.incrementer.index() >= this.program.length ||
+            this.program[this.incrementer.index()] !== '"'
+        ) {
+            throw new Error(`Unterminated string at line ${startToken.line}`);
+        }
+
+        this.incrementer.advance(); // Bỏ qua dấu " đóng
+
+        const endToken = this.incrementer.snapshot();
+
+        return {
+            type: 'string',
+            value: token,
+            location: { start: startToken, end: endToken },
+        };
+    }
+
+    twoCharSymbol(): SymbolToken {
+        const startToken = this.incrementer.snapshot();
+        const token = `${this.program[this.incrementer.index()]}${this.program[this.incrementer.index() + 1]}`; // Chỉ lấy đúng 2 ký tự, không cần vòng lặp while
+
+        this.incrementer.advance();
+        this.incrementer.advance();
+
+        const endToken = this.incrementer.snapshot();
+
+        return {
+            type: token as SymbolType,
+            location: { start: startToken, end: endToken },
+        };
+    }
+
+    oneCharSymbol(): SymbolToken {
+        const startToken = this.incrementer.snapshot();
+        const token = `${this.program[this.incrementer.index()]}`;
+
+        this.incrementer.advance();
+
+        const endToken = this.incrementer.snapshot();
+
+        return {
+            type: token as SymbolType,
+            location: { start: startToken, end: endToken },
+        };
+    }
 }
