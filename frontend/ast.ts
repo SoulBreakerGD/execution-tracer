@@ -147,7 +147,7 @@ export interface WhileLoop extends BaseNode {
     body: Block;
 }
 
-// fn add(a, b) { body } - add là tên function, parameters là tên tham số
+// fn add(a, b) { body } - add là tên function và a, b là parameter identifiers bởi người dùng đặt
 export interface FunctionDeclaration extends BaseNode {
     type: 'FunctionDeclaration';
     name: string;
@@ -155,7 +155,7 @@ export interface FunctionDeclaration extends BaseNode {
     body: Block;
 }
 
-// return; hoặc return x + 1; - expression là optional vì có thể return không có giá trị
+// return; hoặc return x + 1; - Expression là optional vì có thể return không có giá trị
 export interface ReturnStatement extends BaseNode {
     type: 'ReturnStatement';
     expression?: Expression;
@@ -169,7 +169,7 @@ export interface AssignmentStatement extends BaseNode {
 }
 
 // ExpressionStatement là khi một Expression đứng 1 mình thành câu lệnh, kết thúc bằng ;
-// print(x);   đây là ExpressionStatement, bên trong có Call expression
+// print(x);   đây là ExpressionStatement, bên trong có Call Expression
 // x + 1;      hợp lệ nhưng vô nghĩa, vẫn là ExpressionStatement
 export interface ExpressionStatement extends BaseNode {
     type: 'ExpressionStatement';
