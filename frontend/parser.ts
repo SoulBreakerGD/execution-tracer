@@ -3,9 +3,21 @@
 // new TokenManager(tokens)
 //     ↓
 // new Parser(tokenManager)
+import { uuid } from '../utils';
+import {
+    AssignmentStatement,
+    Block,
+    Expression,
+    ExpressionStatement,
+    FunctionDeclaration,
+    IfStatement,
+    ReturnStatement,
+    Statement,
+    WhileLoop,
+} from './ast';
 import { type Token, TokenManager } from './tokenizer';
 
-// Các Lookahead functions để xác định cú pháp trước khi gọi hàm xử lý
+// Các Lookahead functions để Parser quyết định token hiện tại parse theo hướng nào trước khi eat() nó
 function isPrimitiveLookahead(token: Token): boolean {
     return (
         token.type === 'number' ||
@@ -66,15 +78,43 @@ class Parser {
         this.tokenManager = tokenManager;
     }
 
-    parse() {
-        const statements = [];
-        // while() {
-        //     statements.push(this.parseStatement)
-        // }
-        return;
+    // Đọc statements cho đến khi gặp } hoặc EOF
+    private parseBlock(): Block {
+        const statements: Statement[] = [];
+        while (isStatementLookahead(this.tokenManager.peek())) {
+            statements.push(this.parseStatement());
+        }
+
+        return {
+            id: uuid(),
+            location:
+                statements.length > 0
+                    ? { start: statements[0].location.start, end: statements[statements.length - 1].location.end }
+                    : this.tokenManager.peek().location,
+            type: 'Block',
+            statements,
+        };
     }
 
-    parseStatement() {
+    // Entry point bên ngoài gọi, đọc 1 block chứa tất cả statements của program (toàn bộ Array token từ đầu đến EOF, return root note của AST)
+    // eat('EOF') để đảm bảo đã đọc toàn bộ input
+    public parse(): Block {
+        const programBlock: Block = this.parseBlock();
+
+        this.tokenManager.eat('EOF');
+
+        return programBlock;
+    }
+
+    private parseAssignmentOrExpressionStatement(): AssignmentStatement | ExpressionStatement {
+        throw new Error('Not implemented');
+    }
+
+    private parseExpression(): Expression {
+        throw new Error('Not implemented');
+    }
+
+    private parseStatement(): Statement {
         const currentToken = this.tokenManager.peek();
 
         if (isIfStatementLookahead(currentToken)) return this.parseIfStatement();
@@ -82,15 +122,37 @@ class Parser {
         if (isFunctionDeclarationLookahead(currentToken)) return this.parseFunctionDeclaration();
         if (isReturnStatementLookahead(currentToken)) return this.parseReturnStatement();
         if (isExpressionLookahead(currentToken)) return this.parseAssignmentOrExpressionStatement();
+
+        throw new Error(`Unexpected token: ${currentToken.type}`);
     }
 
-    parseIfStatement() {}
+    private parseIfStatement(): IfStatement {
+        throw new Error('Not implemented');
+    }
 
-    parseWhileLoop() {}
+    private parseWhileLoop(): WhileLoop {
+        throw new Error('Not implemented');
+    }
 
-    parseFunctionDeclaration() {}
+    private parseFunctionDeclaration(): FunctionDeclaration {
+        throw new Error('Not implemented');
+    }
 
-    parseReturnStatement() {}
+    private parseReturnStatement(): ReturnStatement {
+        const startToken = this.tokenManager.eat('return').location.start;
 
-    parseAssignmentOrExpressionStatement() {}
+        let expression: Expression | undefined;
+        if (isExpressionLookahead(this.tokenManager.peek())) {
+            expression = this.parseExpression();
+        }
+
+        const endToken = this.tokenManager.eat(';').location.end;
+
+        return {
+            id: uuid(),
+            location: { start: startToken, end: endToken },
+            type: 'ReturnStatement',
+            expression,
+        };
+    }
 }

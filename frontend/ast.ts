@@ -74,11 +74,7 @@ export interface ObjectLiteral extends BaseNode {
     pairs: KVPair[];
 }
 
-// Atom là Expression đơn giản nhất, Parser đọc trực tiếp
-//   42        → NumberLiteral
-//   "hello"   → StringLiteral
-//   true      → BooleanLiteral
-//   x         → Identifier
+// Atom là Expression đơn giản nhất, Parser đọc trực tiếp, gồm Primitive + các dạng bọc (expression), [array], {object}
 //   (1 + 2)   → ParenthesizedExpression
 //   [1, 2]    → ArrayLiteral
 //   { a: 1 }  → ObjectLiteral
@@ -124,6 +120,7 @@ type AccessOrCall = PropAccess | ElementAccess | Call;
 
 // Expression là bất cứ thứ gì trả về một giá trị khi được tính toán
 // Nếu có thể viết: let x = <thứ này> - đó là Expression
+// Dùng ở nhiều chỗ: sau '=', trong condition của if/while, trong argument list...
 export type Expression = Atom | AccessOrCall | BinaryExpression | UnaryExpression;
 
 // if (condition) { body } else if (elseIfCondition) { elseIfBody } else { }

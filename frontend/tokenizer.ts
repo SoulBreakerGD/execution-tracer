@@ -87,25 +87,25 @@ class Incrementer {
     private readonly position: Position = { line: 1, column: 1, index: 0 };
 
     // Di chuyển con trỏ tiến lên một ký tự
-    advance() {
+    public advance() {
         this.position.index++;
         this.position.column++;
     }
 
     // Gọi để xuống line mới khi gặp ký tự \n
-    newline() {
+    public newline() {
         this.position.line++;
         this.position.column = 1;
     }
 
     // Trả về copy của position hiện tại
-    snapshot() {
+    public snapshot() {
         return { ...this.position }; // Tạo một object mới với tất cả fields được copy sang (shallow copy)
     }
 
     // Tokenizer cần index để biết đang trỏ vào kí tự nào nhưng position là private
     // Method này để expose index mà không expose cả object.position
-    index(): number {
+    public index(): number {
         return this.position.index;
     }
 }
@@ -118,7 +118,7 @@ class Tokenizer {
         this.program = program;
     }
 
-    tokenize() {
+    public tokenize() {
         const tokens: Token[] = [];
 
         // Đọc từng ký tự cho đến khi hết source code
@@ -180,7 +180,7 @@ class Tokenizer {
         return tokens;
     }
 
-    identifierOrKeyword(): IdentifierToken | KeywordToken {
+    public identifierOrKeyword(): IdentifierToken | KeywordToken {
         const startToken = this.incrementer.snapshot();
         let token = '';
 
@@ -209,7 +209,7 @@ class Tokenizer {
         };
     }
 
-    number(): NumberToken {
+    public number(): NumberToken {
         const startToken = this.incrementer.snapshot();
         let token = '';
         let hasDecimal = false;
@@ -236,7 +236,7 @@ class Tokenizer {
         };
     }
 
-    string(): StringToken {
+    public string(): StringToken {
         const startToken = this.incrementer.snapshot();
         let token = '';
 
@@ -262,7 +262,7 @@ class Tokenizer {
         };
     }
 
-    twoCharSymbol(): SymbolToken {
+    public twoCharSymbol(): SymbolToken {
         const startToken = this.incrementer.snapshot();
         const token = `${this.program[this.incrementer.index()]}${this.program[this.incrementer.index() + 1]}`; // Chỉ lấy đúng 2 ký tự, không cần vòng lặp while
 
@@ -277,7 +277,7 @@ class Tokenizer {
         };
     }
 
-    oneCharSymbol(): SymbolToken {
+    public oneCharSymbol(): SymbolToken {
         const startToken = this.incrementer.snapshot();
         const token = `${this.program[this.incrementer.index()]}`;
 
@@ -302,12 +302,12 @@ export class TokenManager {
     }
 
     // Chỉ nhìn vào token vị trí hiện tại rồi return
-    peek(): Token {
+    public peek(): Token {
         return this.tokens[this.index];
     }
 
     // Kiểm tra token vị trí hiện tại có phải type thằng eat() đang mong đợi hay không, nếu có thì return token đó, không thì ném lỗi
-    eat(expectedType: TokenType | TokenType[]): Token {
+    public eat(expectedType: TokenType | TokenType[]): Token {
         const token = this.tokens[this.index];
         const expectedTypes = Array.isArray(expectedType) ? expectedType : [expectedType]; // Thống nhất thành một Array có 1 hoặc nhiều phần tử
 
