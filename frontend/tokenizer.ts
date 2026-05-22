@@ -21,7 +21,7 @@ interface KeywordToken extends BaseToken {
     type: KeywordType;
 }
 
-interface IdentifierToken extends BaseToken {
+export interface IdentifierToken extends BaseToken {
     type: 'identifier';
     value: string;
 }

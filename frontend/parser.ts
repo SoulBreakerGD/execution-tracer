@@ -13,6 +13,7 @@ import {
     ExpressionKey,
     ExpressionStatement,
     FunctionDeclaration,
+    Identifier,
     IdentifierKey,
     IfStatement,
     KVPair,
@@ -23,7 +24,7 @@ import {
     Statement,
     WhileLoop,
 } from './ast';
-import { type Token, TokenManager } from './tokenizer';
+import { type IdentifierToken, type Token, TokenManager } from './tokenizer';
 
 // Các Lookahead functions để Parser quyết định token hiện tại parse theo hướng nào trước khi eat() nó
 function isPrimitiveLookahead(token: Token): boolean {
@@ -114,7 +115,7 @@ class Parser {
         return programBlock;
     }
 
-    // parseAtom()                             ← primitive literal, identifier, các dạng bọc (expression), [array], {object}
+    // parseAtom()                             ← primitive literal, identifier, các dạng bọc (Expression), [Array], {Object}
     //   → parseAccessOrCallExpression()       ← . [] ()
     //     → parseUnaryExpression()            ← ! - +
     //       → parseMultiplicativeExpression() ← * / %
@@ -242,7 +243,7 @@ class Parser {
     }
 
     // Parse một cặp key-value trong object literal
-    // ExpressionKey:  { [x + 1]: "value" } - key được tính từ expression
+    // ExpressionKey:  { [x + 1]: "value" } - key được tính từ Expression
     // IdentifierKey:  { name: "John" }     - key là tên trực tiếp
     // Primitive key:  { 42: "value" }      - key là literal (number, string)
     private parseKVPair(): KVPair {
@@ -318,6 +319,71 @@ class Parser {
         else if (peekToken.type === '{') return this.parseObjectLiteral();
 
         throw new Error(`Unexpected token: ${peekToken.type}`);
+    }
+
+    // Xử lý property access (.), element access ([]) và function call (()) sau một Atom
+    // Mỗi lần lặp bọc leftNode cũ vào một node mới - cho phép chain: obj.method(x)[0].name → PropAccess → Call → ElementAccess → PropAccess
+    private parseAccessOrCallExpression(): Expression {
+        let leftNode: Expression = this.parseAtom();
+
+        while (true) {
+            const peekToken = this.tokenManager.peek();
+
+            // obj.method - eat dấu . rồi đọc tên property
+            if (peekToken.type === '.') {
+                this.tokenManager.eat('.');
+
+                const token = this.tokenManager.eat('identifier') as IdentifierToken;
+
+                // Tạo Identifier node từ token
+                const property: Identifier = {
+                    id: uuid(),
+                    location: token.location,
+                    type: 'Identifier',
+                    name: token.value,
+                };
+
+                leftNode = {
+                    id: uuid(),
+                    type: 'PropAccess',
+                    location: { start: leftNode.location.start, end: property.location.end },
+                    target: leftNode, // Identifier { name: "obj" },  ← Bọc leftNode cũ vào một node mới.
+                    property: property, // Identifier { name: "method" }
+                };
+            } else if (peekToken.type === '[') {
+                // arr[0] - eat [ rồi parseExpression bên trong làm index, kết thúc bằng ]
+                this.tokenManager.eat('[');
+
+                const index = this.parseExpression();
+                const endToken = this.tokenManager.eat(']').location.end;
+
+                leftNode = {
+                    id: uuid(),
+                    type: 'ElementAccess',
+                    location: { start: leftNode.location.start, end: endToken },
+                    target: leftNode,
+                    index: index, // NumberLiteral { value: 0 }
+                };
+            } else if (peekToken.type === '(') {
+                // fn(a, b) - eat ( rồi parse argument list, kết thúc bằng )
+                this.tokenManager.eat('(');
+
+                // Nếu không có argument nào thì là call rỗng fn()
+                const args = isExpressionLookahead(this.tokenManager.peek()) ? this.parseExpressionList() : [];
+
+                const endToken = this.tokenManager.eat(')').location.end;
+
+                leftNode = {
+                    id: uuid(),
+                    type: 'Call',
+                    location: { start: leftNode.location.start, end: endToken },
+                    target: leftNode,
+                    arguments: args, // [Identifier { name: "x" }]
+                };
+            } else break;
+        }
+
+        return leftNode;
     }
 
     private parseExpression(): Expression {

@@ -74,7 +74,7 @@ export interface ObjectLiteral extends BaseNode {
     pairs: KVPair[];
 }
 
-// Atom là Expression đơn giản nhất, Parser đọc trực tiếp, gồm Primitive + các dạng bọc (expression), [array], {object}
+// Atom là Expression đơn giản nhất, Parser đọc trực tiếp, gồm Primitive + các dạng bọc (Expression), [Array], {Object}
 //   (1 + 2)   → ParenthesizedExpression
 //   [1, 2]    → ArrayLiteral
 //   { a: 1 }  → ObjectLiteral

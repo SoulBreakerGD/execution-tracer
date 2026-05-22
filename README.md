@@ -15,7 +15,7 @@ Source code (string)
       ↓
   TokenManager    → cursor interface for Parser to consume tokens safely
       ↓
-  Parser          → builds an Abstract Syntax Tree (AST) from tokens       [upcoming]
+  Parser          → builds an Abstract Syntax Tree (AST) from tokens       [in progress]
       ↓
   Interpreter     → walks the AST, executes the program step by step       [upcoming]
       ↓
@@ -116,7 +116,7 @@ A cursor interface that Parser uses to consume the token array safely. Exposes t
 
 `eat()` accepts either a single type or an array of types — useful when the Parser can accept multiple valid tokens at a given position. Unlike some implementations that make the expected type optional, requiring it explicitly here prevents silent failures and makes grammar expectations visible at every call site.
 
-### 🔲 AST node types
+### ✅ AST node types
 
 ### 🔲 Parser
 
