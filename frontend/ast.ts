@@ -55,7 +55,7 @@ export interface ArrayLiteral extends BaseNode {
 
 // Key của object literal có 2 dạng:
 //   { name: "John" }    → IdentifierKey (tên trực tiếp, không evaluate)
-//   { [x + 1]: "val" }  → ExpressionKey (tính toán trước khi dùng làm key)
+//   { [x + 1]: "value" }  → ExpressionKey (tính toán trước khi dùng làm key)
 export interface IdentifierKey {
     type: 'IdentifierKey';
     identifier: Identifier;
