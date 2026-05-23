@@ -118,7 +118,21 @@ A cursor interface that Parser uses to consume the token array safely. Exposes t
 
 ### ✅ AST node types
 
-### 🔲 Parser
+### 🔄 Parser
+
+Transforms the token array into an AST using recursive descent parsing. Each grammar rule maps to a dedicated method; methods call each other recursively to handle nested structures.
+
+**Complete:**
+
+- Lookahead functions — `isPrimitiveLookahead`, `isAtomLookahead`, `isExpressionLookahead`, `isStatementLookahead`, and per-statement variants
+- `parse()`, `parseBlock()`, `parseStatement()` — entry point and dispatch
+- Full expression chain with correct operator precedence (multiplicative → additive → relational → equality → and → or)
+- `parseUnaryExpression()` — recursive to handle `!!true`, `--x`
+- `parseAccessOrCallExpression()` — left-to-right chaining of `.`, `[]`, `()` via iterative wrapping
+- `parsePrimitive()`, `parseAtom()`, `parseParenthesizedExpression()`, `parseArrayLiteral()`, `parseObjectLiteral()`
+- `parseReturnStatement()`, `parseAssignmentOrExpressionStatement()`
+  **In progress:**
+- `parseWhileLoop()`, `parseIfStatement()`, `parseFunctionDeclaration()`
 
 ### 🔲 Interpreter
 
@@ -135,6 +149,8 @@ A cursor interface that Parser uses to consume the token array safely. Exposes t
 **Incrementer class** — position tracking (line, column, index) is extracted into its own class. `snapshot()` returns a shallow copy of the current position so that token locations are not mutated as the cursor advances.
 
 **Required expected type in `eat()`** — making the expected type non-optional means every call site explicitly declares what token it expects. This makes grammar rules readable in code and produces clear error messages when source code doesn't match.
+
+**Operator precedence via method layering** — instead of a precedence table or Pratt parser, each operator group has its own method that calls the next-higher-precedence method first. This makes the grammar explicit and readable: `parseAdditiveExpression` calls `parseMultiplicativeExpression`, which calls `parseUnaryExpression`, and so on.
 
 ---
 

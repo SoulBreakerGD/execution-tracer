@@ -1,4 +1,4 @@
-Có 5 loại token:
+## Có 5 loại token:
 
 - keywords: if else while true false null fn return
 - identifiers: chuỗi các chữ số bắt đầu từ 1 chữ cái

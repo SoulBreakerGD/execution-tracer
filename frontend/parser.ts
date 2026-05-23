@@ -115,17 +115,6 @@ class Parser {
         return programBlock;
     }
 
-    // parseAtom()                             ← primitive literal, identifier, các dạng bọc (Expression), [Array], {Object}
-    //   → parseAccessOrCallExpression()       ← . [] ()
-    //     → parseUnaryExpression()            ← ! - +
-    //       → parseMultiplicativeExpression() ← * / %
-    //         → parseAdditiveExpression()     ← + -
-    //           → parseRelationalExpression() ← < > <= >=
-    //             → parseEqualityExpression() ← == !=
-    //               → parseAndExpression()    ← &&
-    //                 → parseOrExpression()   ← ||
-    //                   → parseExpression()
-
     // Parse một giá trị đơn - boolean, null, number, string hoặc identifier
     private parsePrimitive(): Primitive {
         const peekToken = this.tokenManager.peek();
@@ -201,13 +190,15 @@ class Parser {
 
     // Parse Expression được bọc trong () - ví dụ: (x + 1)
     private parseParenthesizedExpression(): ParenthesizedExpression {
-        const startToken = this.tokenManager.eat('(').location.start;
+        const startNode = this.tokenManager.eat('(').location.start;
+
         const expression = this.parseExpression();
-        const endToken = this.tokenManager.eat(')').location.end;
+
+        const endNode = this.tokenManager.eat(')').location.end;
 
         return {
             id: uuid(),
-            location: { start: startToken, end: endToken },
+            location: { start: startNode, end: endNode },
             type: 'ParenthesizedExpression',
             expressions: expression,
         };
@@ -228,15 +219,15 @@ class Parser {
 
     // Parse array literal - [1, "hello", fn(x)] hoặc [] nếu rỗng
     private parseArrayLiteral(): ArrayLiteral {
-        const startToken = this.tokenManager.eat('[').location.start;
+        const startNode = this.tokenManager.eat('[').location.start;
 
         const elements = isExpressionLookahead(this.tokenManager.peek()) ? this.parseExpressionList() : [];
 
-        const endToken = this.tokenManager.eat(']').location.end;
+        const endNode = this.tokenManager.eat(']').location.end;
 
         return {
             id: uuid(),
-            location: { start: startToken, end: endToken },
+            location: { start: startNode, end: endNode },
             type: 'ArrayLiteral',
             elements: elements,
         };
@@ -295,15 +286,15 @@ class Parser {
 
     // Parse object literal - { name: "John", age: 25 } hoặc {} nếu rỗng
     private parseObjectLiteral(): ObjectLiteral {
-        const startToken = this.tokenManager.eat('{').location.start;
+        const startNode = this.tokenManager.eat('{').location.start;
 
         const pairs = isKVPairLookahead(this.tokenManager.peek()) ? this.parseKVPairs() : [];
 
-        const endToken = this.tokenManager.eat('}').location.end;
+        const endNode = this.tokenManager.eat('}').location.end;
 
         return {
             id: uuid(),
-            location: { start: startToken, end: endToken },
+            location: { start: startNode, end: endNode },
             type: 'ObjectLiteral',
             pairs: pairs,
         };
@@ -343,24 +334,28 @@ class Parser {
                     name: token.value,
                 };
 
+                const endNode = property.location.end;
+
                 leftNode = {
                     id: uuid(),
                     type: 'PropAccess',
-                    location: { start: leftNode.location.start, end: property.location.end },
-                    target: leftNode, // Identifier { name: "obj" },  ← Bọc leftNode cũ vào một node mới.
+                    location: { start: leftNode.location.start, end: endNode },
+                    target: leftNode, // Identifier { name: "obj" } ← Bọc leftNode cũ vào một node mới.
                     property: property, // Identifier { name: "method" }
                 };
             } else if (peekToken.type === '[') {
                 // arr[0] - eat [ rồi parseExpression bên trong làm index, kết thúc bằng ]
+
                 this.tokenManager.eat('[');
 
                 const index = this.parseExpression();
-                const endToken = this.tokenManager.eat(']').location.end;
+
+                const endNode = this.tokenManager.eat(']').location.end;
 
                 leftNode = {
                     id: uuid(),
                     type: 'ElementAccess',
-                    location: { start: leftNode.location.start, end: endToken },
+                    location: { start: leftNode.location.start, end: endNode },
                     target: leftNode,
                     index: index, // NumberLiteral { value: 0 }
                 };
@@ -371,12 +366,12 @@ class Parser {
                 // Nếu không có argument nào thì là call rỗng fn()
                 const args = isExpressionLookahead(this.tokenManager.peek()) ? this.parseExpressionList() : [];
 
-                const endToken = this.tokenManager.eat(')').location.end;
+                const endNode = this.tokenManager.eat(')').location.end;
 
                 leftNode = {
                     id: uuid(),
                     type: 'Call',
-                    location: { start: leftNode.location.start, end: endToken },
+                    location: { start: leftNode.location.start, end: endNode },
                     target: leftNode,
                     arguments: args, // [Identifier { name: "x" }]
                 };
@@ -386,24 +381,220 @@ class Parser {
         return leftNode;
     }
 
-    private parseExpression(): Expression {
-        throw new Error('Not implemented');
-    }
-
-    private parseAssignmentOrExpressionStatement(): AssignmentStatement | ExpressionStatement {
-        throw new Error('Not implemented');
-    }
-
-    private parseStatement(): Statement {
+    // Parse các operators !, -, + đứng trước một Expression, gọi đệ quy chính nó để handle được n lớp operators lồng nhau (!!!isValid)
+    private parseUnaryExpression(): Expression {
         const peekToken = this.tokenManager.peek();
 
-        if (isIfStatementLookahead(peekToken)) return this.parseIfStatement();
-        if (isWhileLoopLookahead(peekToken)) return this.parseWhileLoop();
-        if (isFunctionDeclarationLookahead(peekToken)) return this.parseFunctionDeclaration();
-        if (isReturnStatementLookahead(peekToken)) return this.parseReturnStatement();
-        if (isExpressionLookahead(peekToken)) return this.parseAssignmentOrExpressionStatement();
+        if (isUnaryExpressionLookahead(peekToken)) {
+            const operator = this.tokenManager.eat(['!', '+', '-']);
+            const startNode = operator.location.start;
 
-        throw new Error(`Unexpected token: ${peekToken.type}`);
+            const argument = this.parseUnaryExpression();
+            const endNode = argument.location.end;
+
+            return {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'UnaryExpression',
+                operator: operator.type as '!' | '+' | '-',
+                argument: argument,
+            };
+        } else return this.parseAccessOrCallExpression();
+    }
+
+    // Parse các operators *, /, % giữa hai child node Expression
+    private parseMultiplicativeExpression(): Expression {
+        let leftNode: Expression = this.parseUnaryExpression();
+
+        while (
+            this.tokenManager.peek().type === '*' ||
+            this.tokenManager.peek().type === '/' ||
+            this.tokenManager.peek().type === '%'
+        ) {
+            const startNode = leftNode.location.start;
+            const operator = this.tokenManager.eat(['*', '/', '%']);
+
+            const rightNode: Expression = this.parseUnaryExpression();
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: operator.type as '*' | '/' | '%',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    // Parse các operators +, - giữa hai child node Expression
+    private parseAdditiveExpression(): Expression {
+        let leftNode: Expression = this.parseMultiplicativeExpression();
+
+        while (this.tokenManager.peek().type === '+' || this.tokenManager.peek().type === '-') {
+            const startNode = leftNode.location.start;
+            const operator = this.tokenManager.eat(['+', '-']);
+
+            const rightNode: Expression = this.parseMultiplicativeExpression();
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: operator.type as '+' | '-',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    // Parse các operators >, <, >=, <= giữa hai child node Expression
+    private parseRelationalExpression(): Expression {
+        let leftNode: Expression = this.parseAdditiveExpression();
+
+        while (
+            this.tokenManager.peek().type === '<' ||
+            this.tokenManager.peek().type === '>' ||
+            this.tokenManager.peek().type === '<=' ||
+            this.tokenManager.peek().type === '>='
+        ) {
+            const startNode = leftNode.location.start;
+            const operator = this.tokenManager.eat(['>', '<', '>=', '<=']);
+
+            const rightNode: Expression = this.parseAdditiveExpression();
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: operator.type as '>' | '<' | '>=' | '<=',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    // Parse các operators ==, != giữa hai child node Expression
+    private parseEqualityExpression(): Expression {
+        let leftNode: Expression = this.parseRelationalExpression();
+
+        while (this.tokenManager.peek().type === '==' || this.tokenManager.peek().type === '!=') {
+            const startNode = leftNode.location.start;
+            const operator = this.tokenManager.eat(['==', '!=']);
+
+            const rightNode: Expression = this.parseRelationalExpression();
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: operator.type as '==' | '!=',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    // Parse operator && giữa hai child node Expression
+    private parseAndExpression(): Expression {
+        let leftNode: Expression = this.parseEqualityExpression();
+
+        while (this.tokenManager.peek().type === '&&') {
+            const startNode = leftNode.location.start;
+
+            this.tokenManager.eat('&&');
+
+            const rightNode: Expression = this.parseEqualityExpression();
+
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: '&&',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    // Parse operator || giữa hai child node Expression
+    private parseOrExpression(): Expression {
+        let leftNode: Expression = this.parseAndExpression();
+
+        while (this.tokenManager.peek().type === '||') {
+            const startNode = leftNode.location.start;
+
+            this.tokenManager.eat('||');
+
+            const rightNode: Expression = this.parseAndExpression();
+
+            const endNode = rightNode.location.end;
+
+            leftNode = {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'BinaryExpression',
+                left: leftNode,
+                operator: '||',
+                right: rightNode,
+            };
+        }
+
+        return leftNode;
+    }
+
+    private parseExpression(): Expression {
+        return this.parseOrExpression();
+    }
+
+    // Parse Expression đứng một mình thành câu lệnh — có thể là Assignment hoặc Expression Statement
+    private parseAssignmentOrExpressionStatement(): AssignmentStatement | ExpressionStatement {
+        let leftNode: Expression = this.parseExpression();
+        const startNode = leftNode.location.start;
+        const peekToken = this.tokenManager.peek();
+
+        if (peekToken.type === '=') {
+            // Có '=' → AssignmentStatement: x = 42; hoặc arr[0] = value;
+            this.tokenManager.eat('=');
+
+            const rightNode = this.parseExpression();
+
+            const endNode = this.tokenManager.eat(';').location.end;
+
+            return {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'AssignmentStatement',
+                left: leftNode,
+                right: rightNode,
+            };
+        } else {
+            // Không có '=' → ExpressionStatement: print(x); hoặc x + 1;
+            const endNode = this.tokenManager.eat(';').location.end;
+
+            return {
+                id: uuid(),
+                location: { start: startNode, end: endNode },
+                type: 'ExpressionStatement',
+                expression: leftNode,
+            };
+        }
     }
 
     private parseIfStatement(): IfStatement {
@@ -419,20 +610,32 @@ class Parser {
     }
 
     private parseReturnStatement(): ReturnStatement {
-        const startToken = this.tokenManager.eat('return').location.start;
+        const startNode = this.tokenManager.eat('return').location.start;
 
         let expression: Expression | undefined;
         if (isExpressionLookahead(this.tokenManager.peek())) {
             expression = this.parseExpression();
         }
 
-        const endToken = this.tokenManager.eat(';').location.end;
+        const endNode = this.tokenManager.eat(';').location.end;
 
         return {
             id: uuid(),
-            location: { start: startToken, end: endToken },
+            location: { start: startNode, end: endNode },
             type: 'ReturnStatement',
             expression,
         };
+    }
+
+    private parseStatement(): Statement {
+        const peekToken = this.tokenManager.peek();
+
+        if (isIfStatementLookahead(peekToken)) return this.parseIfStatement();
+        if (isWhileLoopLookahead(peekToken)) return this.parseWhileLoop();
+        if (isFunctionDeclarationLookahead(peekToken)) return this.parseFunctionDeclaration();
+        if (isReturnStatementLookahead(peekToken)) return this.parseReturnStatement();
+        if (isExpressionLookahead(peekToken)) return this.parseAssignmentOrExpressionStatement();
+
+        throw new Error(`Unexpected token: ${peekToken.type}`);
     }
 }
