@@ -123,7 +123,7 @@ type AccessOrCall = PropAccess | ElementAccess | Call;
 // Dùng ở nhiều chỗ: sau '=', trong condition của if/while, trong argument list...
 export type Expression = Atom | AccessOrCall | BinaryExpression | UnaryExpression;
 
-// if (condition) { body } else if (elseIfCondition) { elseIfBody } else { }
+// if (condition) { body } else if (elseIfCondition) { elseIfBody } else { elseBranch }
 export interface IfStatement extends BaseNode {
     type: 'IfStatement';
     condition: Expression;
@@ -144,7 +144,7 @@ export interface WhileLoop extends BaseNode {
     body: Block;
 }
 
-// fn add(a, b) { body } - add là tên function và a, b là parameter identifiers bởi người dùng đặt
+// fn add(a, b) { body } - add là function name identifier và a, b là parameter identifiers
 export interface FunctionDeclaration extends BaseNode {
     type: 'FunctionDeclaration';
     name: string;

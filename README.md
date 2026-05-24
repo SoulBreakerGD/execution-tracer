@@ -2,7 +2,7 @@
 
 A custom programming language interpreter with step-by-step execution visualization, built from scratch in TypeScript and React.
 
-> 🚧 **In progress** — Tokenizer and TokenManager complete. Parser and beyond coming next.
+> 🚧 **In progress** — Tokenizer, AST node types and Parser complete. Interpreter and beyond coming next.
 
 ---
 
@@ -15,9 +15,9 @@ Source code (string)
       ↓
   TokenManager    → cursor interface for Parser to consume tokens safely
       ↓
-  Parser          → builds an Abstract Syntax Tree (AST) from tokens       [in progress]
+  Parser          → builds an Abstract Syntax Tree (AST) from tokens
       ↓
-  Interpreter     → walks the AST, executes the program step by step       [upcoming]
+  Interpreter     → walks the AST, executes the program step by step       [in progress]
       ↓
   Visualizer UI   → React interface to inspect each execution step          [upcoming]
 ```
@@ -118,7 +118,7 @@ A cursor interface that Parser uses to consume the token array safely. Exposes t
 
 ### ✅ AST node types
 
-### 🔄 Parser
+### ✅ Parser
 
 Transforms the token array into an AST using recursive descent parsing. Each grammar rule maps to a dedicated method; methods call each other recursively to handle nested structures.
 
@@ -131,7 +131,6 @@ Transforms the token array into an AST using recursive descent parsing. Each gra
 - `parseAccessOrCallExpression()` — left-to-right chaining of `.`, `[]`, `()` via iterative wrapping
 - `parsePrimitive()`, `parseAtom()`, `parseParenthesizedExpression()`, `parseArrayLiteral()`, `parseObjectLiteral()`
 - `parseReturnStatement()`, `parseAssignmentOrExpressionStatement()`
-  **In progress:**
 - `parseWhileLoop()`, `parseIfStatement()`, `parseFunctionDeclaration()`
 
 ### 🔲 Interpreter

@@ -9,6 +9,7 @@ import {
     AssignmentStatement,
     Atom,
     Block,
+    ElseIf,
     Expression,
     ExpressionKey,
     ExpressionStatement,
@@ -597,18 +598,130 @@ class Parser {
         }
     }
 
+    // if (condition) { body } else if (elseIfCondition) { elseIfBody } else { elseBranch }
     private parseIfStatement(): IfStatement {
-        throw new Error('Not implemented');
+        const startNode = this.tokenManager.eat('if').location.start;
+        const elseIfs: ElseIf[] = [];
+        let elseBranch: Block | undefined;
+
+        this.tokenManager.eat('(');
+        const condition = this.parseExpression();
+        this.tokenManager.eat(')');
+
+        this.tokenManager.eat('{');
+        const body = this.parseBlock();
+        let endNode = this.tokenManager.eat('}').location.end;
+
+        while (this.tokenManager.peek().type === 'else') {
+            this.tokenManager.eat('else');
+
+            if (this.tokenManager.peek().type === 'if') {
+                // else if branch → push vào elseIf[]
+                this.tokenManager.eat('if');
+                this.tokenManager.eat('(');
+                const elseIfCondition = this.parseExpression();
+                this.tokenManager.eat(')');
+
+                this.tokenManager.eat('{');
+                const elseIfBody = this.parseBlock();
+                endNode = this.tokenManager.eat('}').location.end;
+
+                elseIfs.push({
+                    condition: elseIfCondition,
+                    body: elseIfBody,
+                });
+            } else {
+                // else branch → gán elseBranch, break
+                this.tokenManager.eat('{');
+                elseBranch = this.parseBlock();
+                endNode = this.tokenManager.eat('}').location.end;
+                break;
+            }
+        }
+
+        return {
+            id: uuid(),
+            location: { start: startNode, end: endNode },
+            type: 'IfStatement',
+            condition: condition,
+            body: body,
+            elseIf: elseIfs,
+            else: elseBranch,
+        };
     }
 
+    // while (condition) { body }
     private parseWhileLoop(): WhileLoop {
-        throw new Error('Not implemented');
+        const startNode = this.tokenManager.eat('while').location.start;
+
+        this.tokenManager.eat('(');
+        const condition = this.parseExpression();
+        this.tokenManager.eat(')');
+
+        this.tokenManager.eat('{');
+        const body = this.parseBlock();
+        const endNode = this.tokenManager.eat('}').location.end;
+
+        return {
+            id: uuid(),
+            location: { start: startNode, end: endNode },
+            type: 'WhileLoop',
+            condition: condition,
+            body: body,
+        };
     }
 
+    // Parse danh sách parameter identifiers cách nhau bằng ,
+    private parseParameters(): Identifier[] {
+        const parameters: Identifier[] = [];
+        const identifierToken = this.tokenManager.eat('identifier') as IdentifierToken;
+
+        parameters.push({
+            id: uuid(),
+            location: identifierToken.location,
+            type: 'Identifier',
+            name: identifierToken.value,
+        });
+
+        while (this.tokenManager.peek().type === ',') {
+            this.tokenManager.eat(',');
+            const identifierToken = this.tokenManager.eat('identifier') as IdentifierToken;
+
+            parameters.push({
+                id: uuid(),
+                location: identifierToken.location,
+                type: 'Identifier',
+                name: identifierToken.value,
+            });
+        }
+
+        return parameters;
+    }
+
+    // fn add(a, b) { body } - add là function name identifier và a, b là parameter identifiers
     private parseFunctionDeclaration(): FunctionDeclaration {
-        throw new Error('Not implemented');
+        const startNode = this.tokenManager.eat('fn').location.start;
+        const name = (this.tokenManager.eat('identifier') as IdentifierToken).value;
+
+        this.tokenManager.eat('(');
+        const parameters: Identifier[] = this.tokenManager.peek().type === 'identifier' ? this.parseParameters() : [];
+        this.tokenManager.eat(')');
+
+        this.tokenManager.eat('{');
+        const body = this.parseBlock();
+        const endNode = this.tokenManager.eat('}').location.end;
+
+        return {
+            id: uuid(),
+            location: { start: startNode, end: endNode },
+            type: 'FunctionDeclaration',
+            name: name,
+            parameters: parameters,
+            body: body,
+        };
     }
 
+    // return; hoặc return [Expression];
     private parseReturnStatement(): ReturnStatement {
         const startNode = this.tokenManager.eat('return').location.start;
 
