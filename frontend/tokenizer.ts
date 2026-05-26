@@ -110,7 +110,7 @@ class Incrementer {
     }
 }
 
-class Tokenizer {
+export class Tokenizer {
     private readonly program: string; // Source code gốc, đọc từ đầu đến cuối, ko thay đổi
     private readonly incrementer: Incrementer = new Incrementer(); // Con trỏ để xem Tokenizer đang đọc tới đâu
 
@@ -314,6 +314,9 @@ export class TokenManager {
         if (expectedTypes.includes(token.type)) {
             this.index++;
             return token;
-        } else throw new Error(`Expected ${expectedTypes.join(', ')} but got '${token.type}'`);
+        } else
+            throw new Error(
+                `Expected ${expectedTypes.join(', ')} but got '${token.type}' at line ${token.location.start.line}`,
+            );
     }
 }

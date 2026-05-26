@@ -81,7 +81,7 @@ function isStatementLookahead(token: Token): boolean {
     );
 }
 
-class Parser {
+export class Parser {
     private readonly tokenManager: TokenManager;
 
     constructor(tokenManager: TokenManager) {
@@ -186,7 +186,7 @@ class Parser {
             };
         }
 
-        throw new Error(`Unexpected token: ${peekToken.type}`);
+        throw new Error(`Unexpected token: ${peekToken.type} at line ${peekToken.location.start.line}`);
     }
 
     // Parse Expression được bọc trong () - ví dụ: (x + 1)
@@ -310,7 +310,7 @@ class Parser {
         else if (peekToken.type === '[') return this.parseArrayLiteral();
         else if (peekToken.type === '{') return this.parseObjectLiteral();
 
-        throw new Error(`Unexpected token: ${peekToken.type}`);
+        throw new Error(`Unexpected token: ${peekToken.type} at line ${peekToken.location.start.line}`);
     }
 
     // Xử lý property access (.), element access ([]) và function call (()) sau một Atom
@@ -749,6 +749,6 @@ class Parser {
         if (isReturnStatementLookahead(peekToken)) return this.parseReturnStatement();
         if (isExpressionLookahead(peekToken)) return this.parseAssignmentOrExpressionStatement();
 
-        throw new Error(`Unexpected token: ${peekToken.type}`);
+        throw new Error(`Unexpected token: ${peekToken.type} at line ${peekToken.location.start.line}`);
     }
 }
