@@ -4,7 +4,7 @@
 //     ↓
 // new Parser(tokenManager)
 import { uuid } from '../utils';
-import {
+import type {
     ArrayLiteral,
     AssignmentStatement,
     Atom,

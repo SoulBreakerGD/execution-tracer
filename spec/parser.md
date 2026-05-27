@@ -1,6 +1,7 @@
 ## Parser là gì?
 
 Parser nhận vào **array tokens** từ Tokenizer và tạo ra **AST (Abstract Syntax Tree)** — một cây biểu diễn cấu trúc ngữ pháp của chương trình.
+Example: https://ts-ast-viewer.com
 
 ```
 Token[]  →  Parser  →  AST (Block node)

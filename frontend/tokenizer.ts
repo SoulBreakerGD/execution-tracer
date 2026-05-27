@@ -80,7 +80,7 @@ function isTwoCharSymbol(c: string) {
     return twoCharSymbols.has(c);
 }
 
-// Con trỏ để Tokenizer biết nó đang đọc đến đâu trong code
+// Helper class để Tokenizer kiểm soát con trỏ trong program code
 class Incrementer {
     // private - chỉ class Incrementer được đọc và ghi position, bên ngoài không thể làm incrementer.position.index = 999 để nhảy con trỏ tùy tiện - mọi thay đổi phải đi qua advance() và newline() (encapsulation)
     // readonly - this.position không thể bị gán thành object khác hoàn toàn, các field bên trong vẫn có thể thay đổi
