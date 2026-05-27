@@ -23,6 +23,19 @@ type FunctionValue =
 export type PrimitiveValue = NumberValue | StringValue | BooleanValue | NullValue;
 export type RuntimeValue = PrimitiveValue | ArrayValue | ObjectValue | FunctionValue;
 
+// Ép kiểu về String
+export function coerceString(primitive: PrimitiveValue): string {
+    switch (primitive.type) {
+        case 'string':
+            return primitive.value;
+        case 'number':
+        case 'boolean':
+            return String(primitive.value);
+        case 'null':
+            return 'null';
+    }
+}
+
 // Thu hẹp RuntimeValue xuống PrimitiveValue
 export function isPrimitive(runtimeValue: RuntimeValue): runtimeValue is PrimitiveValue {
     return (
