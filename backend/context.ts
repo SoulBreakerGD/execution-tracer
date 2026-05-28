@@ -23,7 +23,7 @@ interface BaseContext {
     breakpoint?: boolean;
 }
 
-// Kênh truyền kết quả từ child context lên parent context
+// Kênh truyền pointer từ child context lên parent context
 export interface Accumulator {
     value: Pointer; // // Kết quả của expression/statement vừa xong
     isReturn: boolean; // true khi đang unwind stack do return, mọi context trên đường về đều bị pop

@@ -1,3 +1,4 @@
+import { executor } from './backend/run';
 import { Parser } from './frontend/parser';
 import { Tokenizer, TokenManager } from './frontend/tokenizer';
 
@@ -72,9 +73,11 @@ fn validateParserCapabilities(startValue, stringKey) {
         verified: true,
     };
 }
-
+    
 `;
 
 const tokens = new TokenManager(new Tokenizer(program).tokenize());
 const parser = new Parser(tokens);
-console.log(JSON.stringify(parser.parse()));
+const ast = parser.parse();
+const execute = executor(ast);
+execute.advance();

@@ -1,9 +1,10 @@
 // Định nghĩa tất cả các node types Parser sẽ tạo và Interpreter sẽ walk qua
 import { type TokenLocation } from './tokenizer';
 
+export type ASTNodeId = string;
 // Mọi node trong AST đều có id (để Interpreter track) và location (để Visualizer highlight)
 interface BaseNode {
-    id: string;
+    id: ASTNodeId;
     location: TokenLocation;
 }
 

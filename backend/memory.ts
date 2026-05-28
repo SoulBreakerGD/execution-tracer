@@ -10,13 +10,13 @@ type BooleanValue = { type: 'boolean'; value: boolean };
 type NullValue = { type: 'null' };
 
 // Reference types (lưu Pointer thay vì value)
-type ArrayValue = { type: 'array'; elements: Pointer[] };
-type ObjectValue = { type: 'object'; properties: Record<string, Pointer> };
+export type ArrayValue = { type: 'array'; elements: Pointer[] };
+export type ObjectValue = { type: 'object'; properties: Record<string, Pointer> };
 
 // Function types:
-// - builtinfunction: hàm built-in (print, len...), impl là JS function thực thi trực tiếp
+// - builtinfunction: hàm built-in (print, length...), impl là JS function thực thi trực tiếp
 // - function: hàm do người dùng định nghĩa, lưu AST node và parentEnv để support closure
-type FunctionValue =
+export type FunctionValue =
     | { type: 'builtinfunction'; impl: (args: Pointer[]) => Pointer }
     | { type: 'function'; node: FunctionDeclaration; parentEnv: LexicalEnvironment };
 
@@ -101,7 +101,7 @@ export class LexicalEnvironment {
         this.parent = parent;
     }
 
-    // Tìm trong scope hiện tại, không có thì tìm lên parent, return undefined nếu không tìm thấy ở bất kỳ scope nào
+    // Tìm một biến trong scope hiện tại, không có thì tìm lên parent, return undefined nếu không tìm thấy ở bất kỳ scope nào
     get(variableName: VariableName): Pointer | undefined {
         const pointer = this.localVariables[variableName];
 
@@ -110,7 +110,7 @@ export class LexicalEnvironment {
         if (this.parent) return this.parent.get(variableName);
     }
 
-    // Luôn set vào scope hiện tại, không leo lên parent
+    // Dùng khi khởi tạo một biến, luôn set vào scope hiện tại, không leo lên parent
     set(variableName: VariableName, pointer: Pointer) {
         this.localVariables[variableName] = pointer;
     }

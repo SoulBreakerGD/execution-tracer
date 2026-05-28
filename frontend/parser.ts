@@ -2,7 +2,7 @@
 //     ↓
 // new TokenManager(tokens)
 //     ↓
-// new Parser(tokenManager)
+// new Parser(tokenManager).parse()
 import { uuid } from '../utils';
 import type {
     ArrayLiteral,
