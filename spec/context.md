@@ -4,7 +4,7 @@
 
 Interpreter execute **từng bước nhỏ** để Visualizer có thể pause sau mỗi bước. Một `BinaryExpression` không thể tính xong trong một bước vì `left` và `right` là các expressions khác — phải push vào `executionStack` và tính riêng từng cái.
 
-Cần một cách **bookmark** "node này đang ở bước nào, đã có gì rồi".
+Context cung cấp **bookmark** là các state cho các AST nodes để có thể traverse AST
 
 ---
 

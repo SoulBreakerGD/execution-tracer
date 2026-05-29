@@ -67,8 +67,12 @@ class Executor {
                 accumulator: this.accumulator,
             });
         }
+
+        return this.state();
     }
 
     // Lưu trạng thái hiện tại bao gồm Heap/Stack snapshot
-    private state() {}
+    private state() {
+        return this.printed;
+    }
 }

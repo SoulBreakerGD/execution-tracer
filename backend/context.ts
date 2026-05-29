@@ -93,7 +93,7 @@ export interface CallContext extends BaseContext {
     type: 'Call';
     node: Call;
     phase: 'init' | 'targetcomputed' | 'argcomputed' | 'callready' | 'done';
-    target?: Pointer;
+    target?: Pointer; // Optional vì target ở phase init chưa tồn tại
     args: Pointer[];
 }
 

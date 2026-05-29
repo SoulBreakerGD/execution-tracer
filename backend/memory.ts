@@ -15,10 +15,10 @@ export type ObjectValue = { type: 'object'; properties: Record<string, Pointer> 
 
 // Function types:
 // - builtinfunction: hàm built-in (print, length...), impl là JS function thực thi trực tiếp
-// - function: hàm do người dùng định nghĩa, lưu AST node và parentEnv để support closure
+// - function: hàm do người dùng định nghĩa, lưu AST node và parentEnvironment để support closure
 export type FunctionValue =
     | { type: 'builtinfunction'; impl: (args: Pointer[]) => Pointer }
-    | { type: 'function'; node: FunctionDeclaration; parentEnv: LexicalEnvironment };
+    | { type: 'function'; node: FunctionDeclaration; parentEnvironment: LexicalEnvironment };
 
 export type PrimitiveValue = NumberValue | StringValue | BooleanValue | NullValue;
 export type RuntimeValue = PrimitiveValue | ArrayValue | ObjectValue | FunctionValue;
