@@ -45,7 +45,7 @@ export type Primitive = NumberLiteral | StringLiteral | BooleanLiteral | NullLit
 // Expression được bọc trong () để nhóm - ví dụ: (x + 1) * 2
 export interface ParenthesizedExpression extends BaseNode {
     type: 'ParenthesizedExpression';
-    expressions: Expression;
+    expression: Expression;
 }
 
 // Danh sách các elements bên trong [1, "hello", fn(x)] - mỗi element là một Expression bất kỳ

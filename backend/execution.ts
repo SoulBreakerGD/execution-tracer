@@ -1,18 +1,23 @@
 import type { ASTNode, IfStatement } from '../frontend/ast';
 import type {
     Accumulator,
+    BinaryExpressionContext,
     BlockContext,
     CallContext,
     Context,
+    ElementAccessContext,
     ElseIfContext,
     ExpressionStatementContext,
     FunctionDeclarationContext,
     IfStatementContext,
+    ParenthesizedExpressionContext,
     PrimitiveContext,
+    PropAccessContext,
     ReturnStatementContext,
+    UnaryExpressionContext,
     WhileLoopContext,
 } from './context';
-import { CallStack, Heap, isTruthy, LexicalEnvironment } from './memory';
+import { CallStack, Heap, isPrimitive, isPrimitiveEqual, isTruthy, LexicalEnvironment } from './memory';
 
 function initialElseIfContext(node: IfStatement, index: number): ElseIfContext {
     return { type: 'ElseIf', node: node, phase: 'init', index: index };
@@ -30,13 +35,18 @@ export function initialContext(node: ASTNode): Context {
             return { type: 'Primitive', node: node, phase: 'init' };
         case 'ExpressionStatement':
             return { type: 'ExpressionStatement', node: node, phase: 'init' };
-        // case 'ParenthesizedExpression':
+        case 'ParenthesizedExpression':
+            return { type: 'ParenthesizedExpression', node: node, phase: 'init' };
         // case 'ArrayLiteral':
         // case 'ObjectLiteral':
-        // case 'BinaryExpression':
-        // case 'UnaryExpression':
-        // case 'PropAccess':
-        // case 'ElementAccess':
+        case 'BinaryExpression':
+            return { type: 'BinaryExpression', node: node, phase: 'init' };
+        case 'UnaryExpression':
+            return { type: 'UnaryExpression', node: node, phase: 'init' };
+        case 'PropAccess':
+            return { type: 'PropAccess', node: node, phase: 'init' };
+        case 'ElementAccess':
+            return { type: 'ElementAccess', node: node, phase: 'init' };
         case 'Call':
             return { type: 'Call', node: node, phase: 'init', args: [] };
         case 'IfStatement':
@@ -116,7 +126,140 @@ export function executePrimitive(context: PrimitiveContext, state: State) {
     }
 }
 
-// Execute ExpressionStatement - expression đứng một mình: print(x); x + 1;
+// Execute Expression được bọc trong () - ví dụ: (x + 1) * 2
+// Dấu ngoặc chỉ dùng để nhóm, không tạo ra value mới - chỉ cần execute expression bên trong
+// init: Push inner expression vào executionStack
+// done: accumulator.value đã có kết quả → pop
+export function executeParenthesizedExpression(context: ParenthesizedExpressionContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.expression));
+        context.phase = 'done';
+
+        return;
+    }
+
+    if (context.phase === 'done') {
+        state.executionStack.pop();
+        return;
+    }
+}
+
+// - `init`: push `left` expression vào `executionStack`
+// - `lhscomputed`: lưu `accumulator.value` vào `context.left`, push `right` expression
+// - `rhscomputed`: có đủ `left` + `accumulator.value` (right) → apply operator → ghi kết quả vào `accumulator.value` → pop
+
+// `left?: Pointer` - lưu tạm vì `accumulator.value` bị ghi đè khi tính `right`.
+export function executeBinaryExpression(context: BinaryExpressionContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.left));
+        context.phase = 'lhscomputed';
+
+        return;
+    }
+
+    if (context.phase === 'lhscomputed') {
+        context.left = state.accumulator.value;
+        const leftValue = state.heap.get(context.left);
+
+        // Short-circuit && — nếu left false thì không cần tính right
+        if (context.node.operator === '&&' && !isTruthy(leftValue)) {
+            state.accumulator.value = state.heap.set({ type: 'boolean', value: false });
+            state.executionStack.pop();
+            return;
+        }
+
+        // Short-circuit || — nếu left true thì không cần tính right
+        if (context.node.operator === '||' && isTruthy(leftValue)) {
+            state.accumulator.value = state.heap.set({ type: 'boolean', value: true });
+            state.executionStack.pop();
+            return;
+        }
+
+        state.executionStack.push(initialContext(context.node.right));
+        context.phase = 'rhscomputed';
+
+        return;
+    }
+
+    if (context.phase === 'rhscomputed') {
+        const left = state.heap.get(context.left!);
+        const right = state.heap.get(state.accumulator.value);
+
+        // if (isPrimitive(left.right))
+        // todo
+        return;
+    }
+}
+
+// - `init`: push `argument` expression vào `executionStack`
+// - `argcomputed`: apply operator lên `accumulator.value` → ghi kết quả → pop
+export function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.argument));
+        context.phase = 'argcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'argcomputed') {
+        // todo
+        // state.accumulator.value = state.heap.set(context.node.operator(state.heap.get(state.accumulator.value))
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// - `init`: push `target` expression vào `executionStack`
+// - `targetcomputed`: lookup `property` trên `ObjectValue` → ghi Pointer vào `accumulator.value` → pop
+export function executePropAccess(context: PropAccessContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.target));
+        context.phase = 'targetcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'targetcomputed') {
+        // todo
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// `init → targetcomputed → indexcomputed`
+
+// - `init`: push `target` vào `executionStack`
+// - `targetcomputed`: lưu `accumulator.value` vào `context.target`, push `index` expression
+// - `indexcomputed`: dùng `target` + `accumulator.value` (index) → lookup element → ghi vào `accumulator.value` → pop
+
+// `target?: Pointer` — lưu tạm vì `accumulator.value` bị ghi đè khi tính `index`.
+export function executeElementAccess(context: ElementAccessContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.target));
+        context.phase = 'targetcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'targetcomputed') {
+        context.target = state.accumulator.value;
+        state.executionStack.push(initialContext(context.node.index));
+
+        context.phase = 'indexcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'indexcomputed') {
+        // todo
+
+        return;
+    }
+}
+
+// Execute Expression Statement - expression đứng một mình: print(x); x + 1;
 // init: push inner expression vào executionStack để tính
 // done: expression đã xong, kết quả bị bỏ qua vì statement không return value → pop
 export function executeExpressionStatement(context: ExpressionStatementContext, state: State) {
@@ -166,7 +309,6 @@ export function executeCall(context: CallContext, state: State) {
 
         if (context.args.length < context.node.arguments.length) {
             state.executionStack.push(initialContext(context.node.arguments[context.args.length]));
-            context.phase = 'argcomputed';
             return;
         } else context.phase = 'callready';
 
@@ -228,7 +370,7 @@ export function executeCall(context: CallContext, state: State) {
     }
 }
 
-// Execute IfStatement - if (condition) { body } else if (...) { } else { }
+// Execute If Statement - if (condition) { body } else if (...) { } else { }
 // init:         push condition expression vào executionStack
 // condcomputed: condition xong → đọc accumulator.value từ Heap
 //               isTruthy → push body Block, chuyển phase done
@@ -306,7 +448,7 @@ export function executeElseIf(context: ElseIfContext, state: State) {
     }
 }
 
-// Execute WhileLoop - while (condition) { body }
+// Execute While Loop - while (condition) { body }
 // Vòng lặp được tạo ra bằng cách reset phase về 'init' sau mỗi iteration
 // init:         push condition expression vào executionStack
 // condcomputed: condition xong → đọc accumulator.value từ Heap → isTruthy?
@@ -333,7 +475,7 @@ export function executeWhileLoop(context: WhileLoopContext, state: State) {
     }
 }
 
-// Execute FunctionDeclaration
+// Execute Function Declaration
 // Tạo fnPointer lưu AST node + parentEnvironment (scope hiện tại) để support closure
 // Closure hoạt động vì khi hàm được gọi sau này, nó dùng parentEnvironment để lookup biến từ scope nơi nó được định nghĩa, không phải nơi nó được gọi
 // Set fnPointer vào LexicalEnvironment theo tên hàm → pop
@@ -389,9 +531,29 @@ export function execute(context: Context, state: State) {
             return executeBlock(context, state);
         case 'Primitive':
             return executePrimitive(context, state);
+        case 'ParenthesizedExpression':
+            return executeParenthesizedExpression(context, state);
+        case 'BinaryExpression':
+            return executeBinaryExpression(context, state);
+        case 'UnaryExpression':
+            return executeUnaryExpression(context, state);
+        case 'PropAccess':
+            return executePropAccess(context, state);
+        case 'ElementAccess':
+            return executeElementAccess(context, state);
         case 'ExpressionStatement':
             return executeExpressionStatement(context, state);
         case 'Call':
             return executeCall(context, state);
+        case 'IfStatement':
+            return executeIfStatement(context, state);
+        case 'ElseIf':
+            return executeElseIf(context, state);
+        case 'WhileLoop':
+            return executeWhileLoop(context, state);
+        case 'FunctionDeclaration':
+            return executeFunctionDeclaration(context, state);
+        case 'ReturnStatement':
+            return executeReturnStatement(context, state);
     }
 }
