@@ -17,7 +17,16 @@ import type {
     UnaryExpressionContext,
     WhileLoopContext,
 } from './context';
-import { CallStack, Heap, isPrimitive, isPrimitiveEqual, isTruthy, LexicalEnvironment } from './memory';
+import {
+    CallStack,
+    coerceString,
+    Heap,
+    isPrimitive,
+    isPrimitiveEqual,
+    isTruthy,
+    LexicalEnvironment,
+    Pointer,
+} from './memory';
 
 function initialElseIfContext(node: IfStatement, index: number): ElseIfContext {
     return { type: 'ElseIf', node: node, phase: 'init', index: index };
@@ -90,7 +99,7 @@ export function executeBlock(context: BlockContext, state: State) {
 //       Identifier thì lookup trong LexicalEnvironment thay vì tạo value mới
 //       Nếu không tìm thấy → throw ReferenceError
 // done: parent đã đọc accumulator.value → pop
-export function executePrimitive(context: PrimitiveContext, state: State) {
+function executePrimitive(context: PrimitiveContext, state: State) {
     if (context.phase === 'init') {
         switch (context.node.type) {
             case 'NumberLiteral':
@@ -126,11 +135,11 @@ export function executePrimitive(context: PrimitiveContext, state: State) {
     }
 }
 
-// Execute Expression được bọc trong () - ví dụ: (x + 1) * 2
+// Execute Expression được bọc trong (): (x + 1) * 2
 // Dấu ngoặc chỉ dùng để nhóm, không tạo ra value mới - chỉ cần execute expression bên trong
 // init: Push inner expression vào executionStack
 // done: accumulator.value đã có kết quả → pop
-export function executeParenthesizedExpression(context: ParenthesizedExpressionContext, state: State) {
+function executeParenthesizedExpression(context: ParenthesizedExpressionContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.expression));
         context.phase = 'done';
@@ -144,12 +153,12 @@ export function executeParenthesizedExpression(context: ParenthesizedExpressionC
     }
 }
 
-// - `init`: push `left` expression vào `executionStack`
-// - `lhscomputed`: lưu `accumulator.value` vào `context.left`, push `right` expression
-// - `rhscomputed`: có đủ `left` + `accumulator.value` (right) → apply operator → ghi kết quả vào `accumulator.value` → pop
-
-// `left?: Pointer` - lưu tạm vì `accumulator.value` bị ghi đè khi tính `right`.
-export function executeBinaryExpression(context: BinaryExpressionContext, state: State) {
+// Execute Binary Expression
+// init: push left expression vào executionStack
+// lhscomputed: lưu accumulator.value vào context.left, push right expression
+// rhscomputed: có đủ left + accumulator.value (right) → apply operator → ghi kết quả vào accumulator.value → pop
+// left?: Pointer, lưu tạm vì accumulator.value bị ghi đè khi tính right.
+function executeBinaryExpression(context: BinaryExpressionContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.left));
         context.phase = 'lhscomputed';
@@ -161,14 +170,14 @@ export function executeBinaryExpression(context: BinaryExpressionContext, state:
         context.left = state.accumulator.value;
         const leftValue = state.heap.get(context.left);
 
-        // Short-circuit && — nếu left false thì không cần tính right
+        // Nếu left false thì không cần tính right
         if (context.node.operator === '&&' && !isTruthy(leftValue)) {
             state.accumulator.value = state.heap.set({ type: 'boolean', value: false });
             state.executionStack.pop();
             return;
         }
 
-        // Short-circuit || — nếu left true thì không cần tính right
+        // Nếu left true thì không cần tính right
         if (context.node.operator === '||' && isTruthy(leftValue)) {
             state.accumulator.value = state.heap.set({ type: 'boolean', value: true });
             state.executionStack.pop();
@@ -182,18 +191,92 @@ export function executeBinaryExpression(context: BinaryExpressionContext, state:
     }
 
     if (context.phase === 'rhscomputed') {
-        const left = state.heap.get(context.left!);
-        const right = state.heap.get(state.accumulator.value);
+        const leftPointer = context.left!;
+        const rightPointer = state.accumulator.value;
+        const leftValue = state.heap.get(leftPointer);
+        const rightValue = state.heap.get(rightPointer);
 
-        // if (isPrimitive(left.right))
-        // todo
+        let result: Pointer;
+
+        switch (context.node.operator) {
+            case '+':
+                if (leftValue.type === 'number' && rightValue.type === 'number') {
+                    result = state.heap.set({ type: 'number', value: leftValue.value + rightValue.value });
+                } else if (leftValue.type === 'string' && rightValue.type === 'string') {
+                    result = state.heap.set({ type: 'string', value: leftValue.value + rightValue.value });
+                } else throw new Error(`Invalid operands for +: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '-':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'number', value: leftValue.value - rightValue.value });
+                else throw new Error(`Invalid operands for -: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '*':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'number', value: leftValue.value * rightValue.value });
+                else throw new Error(`Invalid operands for *: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '/':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'number', value: leftValue.value / rightValue.value });
+                else throw new Error(`Invalid operands for /: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '%':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'number', value: leftValue.value % rightValue.value });
+                else throw new Error(`Invalid operands for %: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '>':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'boolean', value: leftValue.value > rightValue.value });
+                else throw new Error(`Invalid operands for >: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '<':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'boolean', value: leftValue.value < rightValue.value });
+                else throw new Error(`Invalid operands for <: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '>=':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'boolean', value: leftValue.value >= rightValue.value });
+                else throw new Error(`Invalid operands for >=: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '<=':
+                if (leftValue.type === 'number' && rightValue.type === 'number')
+                    result = state.heap.set({ type: 'boolean', value: leftValue.value <= rightValue.value });
+                else throw new Error(`Invalid operands for <=: ${leftValue.type} and ${rightValue.type}`);
+                break;
+            case '==':
+                if (leftPointer === rightPointer) result = state.heap.set({ type: 'boolean', value: true });
+                else if (isPrimitive(leftValue) && isPrimitive(rightValue))
+                    result = state.heap.set({ type: 'boolean', value: isPrimitiveEqual(leftValue, rightValue) });
+                else result = state.heap.set({ type: 'boolean', value: false });
+                break;
+            case '!=':
+                if (leftPointer === rightPointer) result = state.heap.set({ type: 'boolean', value: false });
+                else if (isPrimitive(leftValue) && isPrimitive(rightValue))
+                    result = state.heap.set({ type: 'boolean', value: !isPrimitiveEqual(leftValue, rightValue) });
+                else result = state.heap.set({ type: 'boolean', value: true });
+                break;
+            case '&&':
+                result = state.heap.set({ type: 'boolean', value: isTruthy(leftValue) && isTruthy(rightValue) });
+                break;
+            case '||':
+                result = state.heap.set({ type: 'boolean', value: isTruthy(leftValue) || isTruthy(rightValue) });
+                break;
+        }
+
+        state.accumulator.value = result;
+        state.executionStack.pop();
+
         return;
     }
 }
 
-// - `init`: push `argument` expression vào `executionStack`
-// - `argcomputed`: apply operator lên `accumulator.value` → ghi kết quả → pop
-export function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
+// Execute Unary Expression
+// init: Push argument expression vào executionStack
+// argcomputed: Apply operator lên accumulator.value → ghi kết quả → pop
+function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.argument));
         context.phase = 'argcomputed';
@@ -202,17 +285,33 @@ export function executeUnaryExpression(context: UnaryExpressionContext, state: S
     }
 
     if (context.phase === 'argcomputed') {
-        // todo
-        // state.accumulator.value = state.heap.set(context.node.operator(state.heap.get(state.accumulator.value))
+        const value = state.heap.get(state.accumulator.value);
+
+        switch (context.node.operator) {
+            case '!':
+                state.accumulator.value = state.heap.set({ type: 'boolean', value: !isTruthy(value) });
+                break;
+            case '+':
+                if (value.type !== 'number') throw new Error(`Unary '+' expects number, got ${value.type}`);
+                // Giữ nguyên giá trị cũ trong accumulator, không cần set mới vào heap
+                // state.accumulator.value = state.heap.set({ type: 'number', value: value.value });
+                break;
+            case '-':
+                if (value.type !== 'number') throw new Error(`Unary '-' expects number, got ${value.type}`);
+                state.accumulator.value = state.heap.set({ type: 'number', value: -value.value });
+                break;
+        }
+
         state.executionStack.pop();
 
         return;
     }
 }
 
-// - `init`: push `target` expression vào `executionStack`
-// - `targetcomputed`: lookup `property` trên `ObjectValue` → ghi Pointer vào `accumulator.value` → pop
-export function executePropAccess(context: PropAccessContext, state: State) {
+// Execute Property Access: obj.property
+// init: Push target expression vào executionStack
+// targetcomputed: Lookup property trên ObjectValue → ghi Pointer vào accumulator.value → pop
+function executePropAccess(context: PropAccessContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.target));
         context.phase = 'targetcomputed';
@@ -221,21 +320,26 @@ export function executePropAccess(context: PropAccessContext, state: State) {
     }
 
     if (context.phase === 'targetcomputed') {
-        // todo
+        const targetValue = state.heap.get(state.accumulator.value);
+
+        if (targetValue.type !== 'object')
+            throw new Error(`Cannot access property '${context.node.property.name}' of ${targetValue.type}`);
+
+        // Lookup property - nếu không tồn tại thì trả về null thay vì throw
+        const propertyPointer = targetValue.properties[context.node.property.name];
+        state.accumulator.value = propertyPointer ?? state.heap.set({ type: 'null' });
         state.executionStack.pop();
 
         return;
     }
 }
 
-// `init → targetcomputed → indexcomputed`
-
-// - `init`: push `target` vào `executionStack`
-// - `targetcomputed`: lưu `accumulator.value` vào `context.target`, push `index` expression
-// - `indexcomputed`: dùng `target` + `accumulator.value` (index) → lookup element → ghi vào `accumulator.value` → pop
-
-// `target?: Pointer` — lưu tạm vì `accumulator.value` bị ghi đè khi tính `index`.
-export function executeElementAccess(context: ElementAccessContext, state: State) {
+// Execute Element Access: arr[0]
+// init: push target vào executionStack
+// targetcomputed: lưu accumulator.value vào context.target, push index expression
+// indexcomputed: dùng target + accumulator.value (index) → lookup element → ghi vào accumulator.value → pop
+// target?: Pointer, lưu tạm vì accumulator.value bị ghi đè khi tính index
+function executeElementAccess(context: ElementAccessContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.target));
         context.phase = 'targetcomputed';
@@ -246,14 +350,30 @@ export function executeElementAccess(context: ElementAccessContext, state: State
     if (context.phase === 'targetcomputed') {
         context.target = state.accumulator.value;
         state.executionStack.push(initialContext(context.node.index));
-
         context.phase = 'indexcomputed';
 
         return;
     }
 
     if (context.phase === 'indexcomputed') {
-        // todo
+        const targetValue = state.heap.get(context.target!);
+        const indexValue = state.heap.get(state.accumulator.value);
+
+        if (targetValue.type === 'array') {
+            if (indexValue.type !== 'number')
+                throw new Error(`Array index must be a number, but got ${indexValue.type}`);
+
+            const element = targetValue.elements[indexValue.value];
+            state.accumulator.value = element ?? state.heap.set({ type: 'null' });
+        } else if (targetValue.type === 'object') {
+            if (!isPrimitive(indexValue))
+                throw new Error(`Object property key must be a primitive, but got ${indexValue.type}`);
+
+            const property = targetValue.properties[coerceString(indexValue)];
+            state.accumulator.value = property ?? state.heap.set({ type: 'null' });
+        } else throw new Error(`Cannot access element of ${targetValue.type}`);
+
+        state.executionStack.pop();
 
         return;
     }
@@ -262,7 +382,7 @@ export function executeElementAccess(context: ElementAccessContext, state: State
 // Execute Expression Statement - expression đứng một mình: print(x); x + 1;
 // init: push inner expression vào executionStack để tính
 // done: expression đã xong, kết quả bị bỏ qua vì statement không return value → pop
-export function executeExpressionStatement(context: ExpressionStatementContext, state: State) {
+function executeExpressionStatement(context: ExpressionStatementContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.expression));
         context.phase = 'done';
@@ -277,7 +397,7 @@ export function executeExpressionStatement(context: ExpressionStatementContext, 
 }
 
 // Execute Call - gọi function hoặc method và đưa argument vào: add(1, 2), print(x), obj.method(a, b)
-export function executeCall(context: CallContext, state: State) {
+function executeCall(context: CallContext, state: State) {
     // init: bắt đầu bằng việc tính target expression (add, obj.method, arr[0]...)
     // Chưa biết đây là function gì cho đến khi target được evaluate xong
     if (context.phase === 'init') {
@@ -340,7 +460,6 @@ export function executeCall(context: CallContext, state: State) {
 
             state.callStack.push(fnValue.node.name, fnValue.node.body, newEnvironment);
             state.executionStack.push(initialContext(fnValue.node.body));
-
             context.phase = 'done';
         } else {
             throw new Error(`Target is not a function: ${fnValue.type}`);
@@ -378,7 +497,7 @@ export function executeCall(context: CallContext, state: State) {
 //               không truthy + có else branch → pop, push else Block
 //               không truthy + không có gì → bỏ qua
 // done:         pop
-export function executeIfStatement(context: IfStatementContext, state: State) {
+function executeIfStatement(context: IfStatementContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.condition));
         context.phase = 'condcomputed';
@@ -417,7 +536,7 @@ export function executeIfStatement(context: IfStatementContext, state: State) {
 //               có else branch → pop, push else Block
 //               không có gì → bỏ qua
 // done:         pop
-export function executeElseIf(context: ElseIfContext, state: State) {
+function executeElseIf(context: ElseIfContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.elseIf[context.index].condition));
         context.phase = 'condcomputed';
@@ -454,7 +573,7 @@ export function executeElseIf(context: ElseIfContext, state: State) {
 // condcomputed: condition xong → đọc accumulator.value từ Heap → isTruthy?
 //               true  → push body Block, reset phase về 'init' để tính lại condition sau
 //               false → pop, kết thúc vòng lặp
-export function executeWhileLoop(context: WhileLoopContext, state: State) {
+function executeWhileLoop(context: WhileLoopContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.condition));
         context.phase = 'condcomputed';
@@ -479,7 +598,7 @@ export function executeWhileLoop(context: WhileLoopContext, state: State) {
 // Tạo fnPointer lưu AST node + parentEnvironment (scope hiện tại) để support closure
 // Closure hoạt động vì khi hàm được gọi sau này, nó dùng parentEnvironment để lookup biến từ scope nơi nó được định nghĩa, không phải nơi nó được gọi
 // Set fnPointer vào LexicalEnvironment theo tên hàm → pop
-export function executeFunctionDeclaration(context: FunctionDeclarationContext, state: State) {
+function executeFunctionDeclaration(context: FunctionDeclarationContext, state: State) {
     const fnPointer = state.heap.set({
         type: 'function',
         node: context.node,
@@ -498,7 +617,7 @@ export function executeFunctionDeclaration(context: FunctionDeclarationContext, 
 // done: expression đã xong, accumulator.value có kết quả
 //       set isReturn = true → tất cả BlockContext trên đường về sẽ pop ngay
 //       cho đến khi CallContext bắt được và reset isReturn = false
-export function executeReturnStatement(context: ReturnStatementContext, state: State) {
+function executeReturnStatement(context: ReturnStatementContext, state: State) {
     if (context.phase === 'init') {
         if (context.node.expression) {
             state.executionStack.push(initialContext(context.node.expression));
