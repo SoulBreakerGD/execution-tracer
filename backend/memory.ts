@@ -72,7 +72,9 @@ export class Heap {
 
     // Lấy value theo Pointer, throw error nếu Pointer không tồn tại
     public get(pointer: Pointer): RuntimeValue {
-        if (this.storage[pointer] !== undefined) return this.storage[pointer];
+        if (this.storage[pointer] !== undefined) {
+            return this.storage[pointer];
+        }
 
         throw new Error(`Segmentation fault: invalid pointer ${pointer}`);
     }
@@ -105,9 +107,28 @@ export class LexicalEnvironment {
     get(variableName: VariableName): Pointer | undefined {
         const pointer = this.localVariables[variableName];
 
-        if (pointer !== undefined) return pointer;
+        if (pointer !== undefined) {
+            return pointer;
+        }
 
-        if (this.parent) return this.parent.get(variableName);
+        if (this.parent) {
+            return this.parent.get(variableName);
+        }
+    }
+
+    // Tìm và cập nhật giá trị của biến trong scope chain (từ local lên global).
+    // Trả về true nếu tìm thấy và cập nhật thành công, false nếu biến chưa từng được định nghĩa.
+    update(variableName: VariableName, pointer: Pointer): boolean {
+        if (this.localVariables[variableName] !== undefined) {
+            this.localVariables[variableName] = pointer;
+            return true;
+        }
+
+        if (this.parent) {
+            return this.parent.update(variableName, pointer);
+        }
+
+        return false;
     }
 
     // Dùng khi khởi tạo một biến, luôn set vào scope hiện tại, không leo lên parent

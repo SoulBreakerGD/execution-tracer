@@ -201,7 +201,7 @@ export class Parser {
             id: uuid(),
             location: { start: startNode, end: endNode },
             type: 'ParenthesizedExpression',
-            expressions: expression,
+            expression: expression,
         };
     }
 

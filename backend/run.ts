@@ -58,7 +58,10 @@ class Executor {
         while (this.executionStack.length > 0) {
             const currentContext = this.executionStack[this.executionStack.length - 1];
 
-            if (this.breakpoints.has(currentContext.node.id)) return this.state();
+            if (this.breakpoints.has(currentContext.node.id)) {
+                return this.state();
+            }
+
             // execute() có thể thay đổi trạng thái của Heap/Stack
             execute(currentContext, {
                 heap: this.heap,

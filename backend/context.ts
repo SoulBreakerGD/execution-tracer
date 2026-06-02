@@ -52,22 +52,22 @@ export interface ArrayLiteralContext extends BaseContext {
     type: 'ArrayLiteral';
     node: ArrayLiteral;
     phase: 'init' | 'elementscomputed' | 'done';
-    elements: Pointer[];
+    elements: Pointer[]; // Danh sách các Pointer của các phần tử mảng đã được tính toán xong
 }
 
 export interface ObjectLiteralContext extends BaseContext {
     type: 'ObjectLiteral';
     node: ObjectLiteral;
     phase: 'init' | 'keycomputed' | 'valuecomputed' | 'done';
-    key?: string;
-    pairs: [string, Pointer][];
+    key?: string; // Lưu trữ key đã được tính toán cho cặp hiện tại
+    pairs: [string, Pointer][]; // Lưu trữ các cặp key-value đã thu thập
 }
 
 export interface BinaryExpressionContext extends BaseContext {
     type: 'BinaryExpression';
     node: BinaryExpression;
     phase: 'init' | 'lhscomputed' | 'rhscomputed';
-    left?: Pointer;
+    left?: Pointer; // left? lưu tạm vì accumulator.value bị ghi đè khi tính right
 }
 
 export interface UnaryExpressionContext extends BaseContext {
@@ -86,7 +86,7 @@ export interface ElementAccessContext extends BaseContext {
     type: 'ElementAccess';
     node: ElementAccess;
     phase: 'init' | 'targetcomputed' | 'indexcomputed';
-    target?: Pointer;
+    target?: Pointer; // target? lưu tạm vì accumulator.value bị ghi đè khi tính index
 }
 
 export interface CallContext extends BaseContext {
@@ -94,7 +94,7 @@ export interface CallContext extends BaseContext {
     node: Call;
     phase: 'init' | 'targetcomputed' | 'argcomputed' | 'callready' | 'done';
     target?: Pointer; // Optional vì target ở phase init chưa tồn tại
-    args: Pointer[];
+    args: Pointer[]; // Danh sách các Pointer của các arguments đã tính toán xong
 }
 
 export interface IfStatementContext extends BaseContext {
@@ -107,7 +107,7 @@ export interface ElseIfContext extends BaseContext {
     type: 'ElseIf';
     node: IfStatement;
     phase: 'init' | 'condcomputed' | 'done';
-    index: number;
+    index: number; // Chỉ số của nhánh else if hiện tại đang được xử lý trong mảng elseIf
 }
 
 export interface WhileLoopContext extends BaseContext {
@@ -140,7 +140,7 @@ export interface PropAccessAssignmentContext extends BaseContext {
     type: 'PropAccessAssignment';
     node: AssignmentStatement;
     phase: 'init' | 'rhscomputed' | 'targetcomputed';
-    right?: Pointer;
+    right?: Pointer; // Lưu kết quả của vế phải (rhs) để dùng sau khi đã xác định được đối tượng đích
 }
 
 // arr[0] = value, left là ElementAccess
@@ -148,8 +148,8 @@ export interface ElementAccessAssignmentContext extends BaseContext {
     type: 'ElementAccessAssignment';
     node: AssignmentStatement;
     phase: 'init' | 'rhscomputed' | 'targetcomputed' | 'indexcomputed';
-    right?: Pointer;
-    target?: Pointer;
+    right?: Pointer; // Lưu kết quả của vế phải (rhs)
+    target?: Pointer; // Lưu Pointer của mảng/đối tượng đích trong khi chờ tính toán index
 }
 
 // print(x); x + 1;

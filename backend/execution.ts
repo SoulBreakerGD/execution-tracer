@@ -1,17 +1,22 @@
-import type { ASTNode, IfStatement } from '../frontend/ast';
+import type { ASTNode, ElementAccess, Identifier, IfStatement, PropAccess } from '../frontend/ast';
 import type {
     Accumulator,
+    ArrayLiteralContext,
     BinaryExpressionContext,
     BlockContext,
     CallContext,
     Context,
+    ElementAccessAssignmentContext,
     ElementAccessContext,
     ElseIfContext,
     ExpressionStatementContext,
     FunctionDeclarationContext,
+    IdentifierAssignmentContext,
     IfStatementContext,
+    ObjectLiteralContext,
     ParenthesizedExpressionContext,
     PrimitiveContext,
+    PropAccessAssignmentContext,
     PropAccessContext,
     ReturnStatementContext,
     UnaryExpressionContext,
@@ -25,7 +30,7 @@ import {
     isPrimitiveEqual,
     isTruthy,
     LexicalEnvironment,
-    Pointer,
+    type Pointer,
 } from './memory';
 
 function initialElseIfContext(node: IfStatement, index: number): ElseIfContext {
@@ -46,8 +51,10 @@ export function initialContext(node: ASTNode): Context {
             return { type: 'ExpressionStatement', node: node, phase: 'init' };
         case 'ParenthesizedExpression':
             return { type: 'ParenthesizedExpression', node: node, phase: 'init' };
-        // case 'ArrayLiteral':
-        // case 'ObjectLiteral':
+        case 'ArrayLiteral':
+            return { type: 'ArrayLiteral', node: node, phase: 'init', elements: [] };
+        case 'ObjectLiteral':
+            return { type: 'ObjectLiteral', node: node, phase: 'init', pairs: [] };
         case 'BinaryExpression':
             return { type: 'BinaryExpression', node: node, phase: 'init' };
         case 'UnaryExpression':
@@ -66,9 +73,14 @@ export function initialContext(node: ASTNode): Context {
             return { type: 'FunctionDeclaration', node: node };
         case 'ReturnStatement':
             return { type: 'ReturnStatement', node: node, phase: 'init' };
-        // case 'AssignmentStatement':
+        case 'AssignmentStatement':
+            if (node.left.type === 'Identifier') return { type: 'IdentifierAssignment', node: node, phase: 'init' };
+            if (node.left.type === 'PropAccess') return { type: 'PropAccessAssignment', node: node, phase: 'init' };
+            if (node.left.type === 'ElementAccess')
+                return { type: 'ElementAccessAssignment', node: node, phase: 'init' };
+
         default:
-            throw new Error();
+            throw new Error(`Unknown node type: ${node.type}`);
     }
 }
 
@@ -153,11 +165,136 @@ function executeParenthesizedExpression(context: ParenthesizedExpressionContext,
     }
 }
 
+// Execute Array Literal: [1, 2 + 3, fn()]
+// init:             Nếu mảng rỗng → chuyển thẳng sang done. Nếu không → push element đầu tiên vào executionStack
+// elementscomputed: Mỗi khi một element được tính xong → lưu Pointer vào context.elements
+//                   Nếu còn element tiếp theo → push vào executionStack
+//                   Nếu đã hết element → chuyển sang done
+// done:             Tạo ArrayValue trên Heap từ các elements đã thu thập, ghi Pointer vào accumulator.value → pop
+function executeArrayLiteral(context: ArrayLiteralContext, state: State) {
+    if (context.phase === 'init') {
+        if (context.node.elements.length > 0) {
+            state.executionStack.push(initialContext(context.node.elements[0]));
+            context.phase = 'elementscomputed';
+        } else {
+            context.phase = 'done';
+        }
+
+        return;
+    }
+
+    if (context.phase === 'elementscomputed') {
+        context.elements.push(state.accumulator.value);
+
+        if (context.elements.length < context.node.elements.length) {
+            state.executionStack.push(initialContext(context.node.elements[context.elements.length]));
+        } else {
+            context.phase = 'done';
+        }
+
+        return;
+    }
+
+    if (context.phase === 'done') {
+        state.accumulator.value = state.heap.set({ type: 'array', elements: context.elements });
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// Execute Object Literal: { name: "John", [x + 1]: 42 }
+// init:          Nếu object rỗng → chuyển sang done. Nếu không → xử lý cặp đầu tiên
+//                Nếu là ExpressionKey ([x]) → push expression để tính key → keycomputed
+//                Nếu là IdentifierKey (name) → lấy tên trực tiếp, push value expression → valuecomputed
+// keycomputed:   Lấy kết quả key từ accumulator (đã tính xong), ép kiểu sang string
+//                Tiếp tục push value expression của cặp hiện tại vào stack → valuecomputed
+// valuecomputed: Thu thập kết quả value vừa xong vào context.pairs
+//                Nếu còn cặp tiếp theo → lặp lại logic xử lý Key tương tự phase init
+//                Nếu đã hết → chuyển sang done
+// done:          Tạo ObjectValue trên Heap từ context.pairs, ghi Pointer vào accumulator.value → pop
+// Execute Object Literal
+function executeObjectLiteral(context: ObjectLiteralContext, state: State) {
+    if (context.phase === 'init') {
+        if (context.node.pairs.length > 0) {
+            // pairs[0] là cặp key-value đầu tiên. Index [0] bên trong lấy node Key.
+            const key = context.node.pairs[0][0];
+
+            if (key.type === 'ExpressionKey') {
+                state.executionStack.push(initialContext(key.expression));
+                context.phase = 'keycomputed';
+            } else {
+                // IdentifierKey: dùng tên trực tiếp làm key, không evaluate identifier như một biến
+                context.key = key.identifier.name;
+                // Index [1] lấy node Value expression của cặp đầu tiên.
+                state.executionStack.push(initialContext(context.node.pairs[0][1]));
+                context.phase = 'valuecomputed';
+            }
+        } else {
+            context.phase = 'done';
+        }
+
+        return;
+    }
+
+    if (context.phase === 'keycomputed') {
+        const key = state.heap.get(state.accumulator.value);
+
+        if (!isPrimitive(key)) {
+            throw new Error(`Object key must be a primitive, but got ${key.type}`);
+        }
+
+        context.key = key.type === 'string' ? key.value : coerceString(key);
+        // pairs.length đóng vai trò là index của cặp hiện tại đang xử lý.
+        // Index [1] lấy phần Value của cặp đó.
+        state.executionStack.push(initialContext(context.node.pairs[context.pairs.length][1]));
+        context.phase = 'valuecomputed';
+
+        return;
+    }
+
+    if (context.phase === 'valuecomputed') {
+        const valuePointer = state.accumulator.value;
+        context.pairs.push([context.key!, valuePointer]);
+
+        if (context.pairs.length < context.node.pairs.length) {
+            // context.pairs.length lúc này là index của cặp tiếp theo trong AST.
+            // Index [0] lấy node Key của cặp tiếp theo đó.
+            const key = context.node.pairs[context.pairs.length][0];
+
+            if (key.type === 'ExpressionKey') {
+                state.executionStack.push(initialContext(key.expression));
+                context.phase = 'keycomputed';
+            } else {
+                // IdentifierKey cho các cặp tiếp theo
+                context.key = key.identifier.name;
+                // Index [1] lấy node Value của cặp tiếp theo.
+                state.executionStack.push(initialContext(context.node.pairs[context.pairs.length][1]));
+                context.phase = 'valuecomputed';
+            }
+        } else {
+            context.phase = 'done';
+        }
+
+        return;
+    }
+
+    if (context.phase === 'done') {
+        // Object.fromEntries chuyển mảng các cặp [key, Pointer] thành object { key: Pointer }.
+        // Ví dụ: [['a', 'ptr-1'], ['b', 'ptr-2']] => { a: 'ptr-1', b: 'ptr-2' }.
+        const properties = Object.fromEntries(context.pairs);
+        state.accumulator.value = state.heap.set({ type: 'object', properties });
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
 // Execute Binary Expression
-// init: push left expression vào executionStack
-// lhscomputed: lưu accumulator.value vào context.left, push right expression
-// rhscomputed: có đủ left + accumulator.value (right) → apply operator → ghi kết quả vào accumulator.value → pop
-// left?: Pointer, lưu tạm vì accumulator.value bị ghi đè khi tính right.
+// init:        Push left expression vào executionStack
+// lhscomputed: Lưu accumulator.value vào context.left, push right expression
+//              Short-circuit: && với left=false hoặc || với left=true → pop ngay, không tính right
+// rhscomputed: Có đủ left + accumulator.value (right) → apply operator → ghi kết quả → pop
 function executeBinaryExpression(context: BinaryExpressionContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.left));
@@ -273,9 +410,9 @@ function executeBinaryExpression(context: BinaryExpressionContext, state: State)
     }
 }
 
-// Execute Unary Expression
-// init: Push argument expression vào executionStack
-// argcomputed: Apply operator lên accumulator.value → ghi kết quả → pop
+// Execute Unary Expression: !true, -x, +1
+// init:        Push argument expression vào executionStack
+// argcomputed: Apply operator lên value → ghi kết quả vào accumulator.value → pop
 function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.argument));
@@ -293,7 +430,7 @@ function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
                 break;
             case '+':
                 if (value.type !== 'number') throw new Error(`Unary '+' expects number, got ${value.type}`);
-                // Giữ nguyên giá trị cũ trong accumulator, không cần set mới vào heap
+                // Pointer hiện tại trong accumulator.value chính là kết quả, không cần set mới vào heap
                 // state.accumulator.value = state.heap.set({ type: 'number', value: value.value });
                 break;
             case '-':
@@ -309,8 +446,9 @@ function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
 }
 
 // Execute Property Access: obj.property
-// init: Push target expression vào executionStack
-// targetcomputed: Lookup property trên ObjectValue → ghi Pointer vào accumulator.value → pop
+// init:           Push target expression vào executionStack
+// targetcomputed: target xong → check phải là object → lookup property name
+//                 Property không tồn tại → trả về null thay vì throw
 function executePropAccess(context: PropAccessContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.target));
@@ -322,10 +460,11 @@ function executePropAccess(context: PropAccessContext, state: State) {
     if (context.phase === 'targetcomputed') {
         const targetValue = state.heap.get(state.accumulator.value);
 
-        if (targetValue.type !== 'object')
+        if (targetValue.type !== 'object') {
             throw new Error(`Cannot access property '${context.node.property.name}' of ${targetValue.type}`);
+        }
 
-        // Lookup property - nếu không tồn tại thì trả về null thay vì throw
+        // Cho phép check obj.prop === null
         const propertyPointer = targetValue.properties[context.node.property.name];
         state.accumulator.value = propertyPointer ?? state.heap.set({ type: 'null' });
         state.executionStack.pop();
@@ -334,11 +473,12 @@ function executePropAccess(context: PropAccessContext, state: State) {
     }
 }
 
-// Execute Element Access: arr[0]
-// init: push target vào executionStack
-// targetcomputed: lưu accumulator.value vào context.target, push index expression
-// indexcomputed: dùng target + accumulator.value (index) → lookup element → ghi vào accumulator.value → pop
-// target?: Pointer, lưu tạm vì accumulator.value bị ghi đè khi tính index
+// Execute Element Access: arr[0], matrix[r][c], obj["key"]
+// init:           Push target vào executionStack
+// targetcomputed: Lưu accumulator.value vào context.target, push index expression
+// indexcomputed:  target + index → lookup element
+//                 array: index phải là number, out of bounds → null
+//                 object: index là primitive, coerce sang string làm key
 function executeElementAccess(context: ElementAccessContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.target));
@@ -360,38 +500,27 @@ function executeElementAccess(context: ElementAccessContext, state: State) {
         const indexValue = state.heap.get(state.accumulator.value);
 
         if (targetValue.type === 'array') {
-            if (indexValue.type !== 'number')
+            if (indexValue.type !== 'number') {
                 throw new Error(`Array index must be a number, but got ${indexValue.type}`);
+            }
 
+            // Out of bounds → null, không throw
             const element = targetValue.elements[indexValue.value];
             state.accumulator.value = element ?? state.heap.set({ type: 'null' });
         } else if (targetValue.type === 'object') {
-            if (!isPrimitive(indexValue))
+            if (!isPrimitive(indexValue)) {
                 throw new Error(`Object property key must be a primitive, but got ${indexValue.type}`);
+            }
 
+            // coerceString chuyển number/boolean/null sang string để dùng làm key
             const property = targetValue.properties[coerceString(indexValue)];
             state.accumulator.value = property ?? state.heap.set({ type: 'null' });
-        } else throw new Error(`Cannot access element of ${targetValue.type}`);
+        } else {
+            throw new Error(`Cannot access element of ${targetValue.type}`);
+        }
 
         state.executionStack.pop();
 
-        return;
-    }
-}
-
-// Execute Expression Statement - expression đứng một mình: print(x); x + 1;
-// init: push inner expression vào executionStack để tính
-// done: expression đã xong, kết quả bị bỏ qua vì statement không return value → pop
-function executeExpressionStatement(context: ExpressionStatementContext, state: State) {
-    if (context.phase === 'init') {
-        state.executionStack.push(initialContext(context.node.expression));
-        context.phase = 'done';
-
-        return;
-    }
-
-    if (context.phase === 'done') {
-        state.executionStack.pop();
         return;
     }
 }
@@ -638,6 +767,152 @@ function executeReturnStatement(context: ReturnStatementContext, state: State) {
     }
 }
 
+// Execute Identifier Assignment: x = 42
+// init:        Push right expression vào executionStack để tính value
+// rhscomputed: accumulator.value là kết quả right
+//              Cast left sang Identifier để lấy tên biến
+//              Set Pointer vào LexicalEnvironment của frame hiện tại → pop
+function executeIdentifierAssignment(context: IdentifierAssignmentContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.right));
+        context.phase = 'rhscomputed';
+
+        return;
+    }
+
+    if (context.phase === 'rhscomputed') {
+        const valuePointer = state.accumulator.value;
+        const valueName = (context.node.left as Identifier).name;
+        const environment = state.callStack.peek().environment;
+
+        // Thử cập nhật biến ở scope gần nhất đã khai báo nó (Lexical Scoping).
+        // Nếu không tìm thấy trong toàn bộ scope chain, mới khởi tạo ở local scope.
+        if (!environment.update(valueName, valuePointer)) {
+            environment.set(valueName, valuePointer);
+        }
+
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// Execute Property Access Assignment: obj.name = value
+// init:           Push right expression vào executionStack
+// rhscomputed:    Lưu kết quả vế phải vào context.right để tránh bị ghi đè
+//                 Push target expression (phần bên trái dấu .) vào stack
+// targetcomputed: Sau khi có Pointer của đối tượng đích, kiểm tra xem nó có phải là 'object' không
+//                 Nếu đúng, cập nhật thuộc tính tương ứng trong Heap bằng Pointer context.right đã lưu
+function executePropAccessAssignment(context: PropAccessAssignmentContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.right));
+        context.phase = 'rhscomputed';
+
+        return;
+    }
+
+    if (context.phase === 'rhscomputed') {
+        // Lưu tạm right trước khi accumulator bị ghi đè khi tính target
+        context.right = state.accumulator.value;
+        state.executionStack.push(initialContext((context.node.left as PropAccess).target));
+        context.phase = 'targetcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'targetcomputed') {
+        const targetValue = state.heap.get(state.accumulator.value);
+
+        if (targetValue.type !== 'object') {
+            throw new Error(`Cannot assign to property of ${targetValue.type}`);
+        }
+
+        // Mutate object trực tiếp trên Heap, tất cả Pointers trỏ vào object này đều thấy thay đổi
+        targetValue.properties[(context.node.left as PropAccess).property.name] = context.right!;
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// Execute Element Access Assignment: arr[0] = value, obj["key"] = value
+// init:           Push right expression
+// rhscomputed:    Lưu kết quả vế phải vào context.right, sau đó push target expression
+// targetcomputed: Lưu Pointer của target vào context.target, sau đó push index expression
+// indexcomputed:  Có đủ 3 thành phần: target, index và giá trị mới (right)
+//                 Array: index phải là number và trong bounds rồi cập nhật
+//                 Object: Ép kiểu index sang string để làm key rồi cập nhật property trong Heap
+function executeElementAccessAssignment(context: ElementAccessAssignmentContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.right));
+        context.phase = 'rhscomputed';
+
+        return;
+    }
+
+    if (context.phase === 'rhscomputed') {
+        context.right = state.accumulator.value;
+        state.executionStack.push(initialContext((context.node.left as ElementAccess).target));
+        context.phase = 'targetcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'targetcomputed') {
+        context.target = state.accumulator.value;
+        state.executionStack.push(initialContext((context.node.left as ElementAccess).index));
+        context.phase = 'indexcomputed';
+
+        return;
+    }
+
+    if (context.phase === 'indexcomputed') {
+        const targetValue = state.heap.get(context.target!);
+        const indexValue = state.heap.get(state.accumulator.value);
+
+        if (targetValue.type === 'array') {
+            if (indexValue.type !== 'number') {
+                throw new Error(`Array index must be a number, but got ${indexValue.type}`);
+            }
+
+            if (indexValue.value < 0 || indexValue.value >= targetValue.elements.length) {
+                throw new Error(`Array index out of bounds: ${indexValue.value}`);
+            }
+
+            targetValue.elements[indexValue.value] = context.right!;
+        } else if (targetValue.type === 'object') {
+            if (!isPrimitive(indexValue)) {
+                throw new Error(`Object property key must be a primitive, but got ${indexValue.type}`);
+            }
+
+            targetValue.properties[coerceString(indexValue)] = context.right!;
+        } else {
+            throw new Error(`Cannot assign to element of ${targetValue.type}`);
+        }
+
+        state.executionStack.pop();
+
+        return;
+    }
+}
+
+// Execute Expression Statement - expression đứng một mình: print(x); x + 1;
+// init: push inner expression vào executionStack để tính
+// done: expression đã xong, kết quả bị bỏ qua vì statement không return value → pop
+function executeExpressionStatement(context: ExpressionStatementContext, state: State) {
+    if (context.phase === 'init') {
+        state.executionStack.push(initialContext(context.node.expression));
+        context.phase = 'done';
+
+        return;
+    }
+
+    if (context.phase === 'done') {
+        state.executionStack.pop();
+        return;
+    }
+}
+
 export function execute(context: Context, state: State) {
     // Khi isReturn = true, tất cả contexts trên đường về đều bị pop, chỉ CallContext mới được xử lý bình thường
     if (state.accumulator.isReturn && context.type !== 'Call') {
@@ -652,6 +927,10 @@ export function execute(context: Context, state: State) {
             return executePrimitive(context, state);
         case 'ParenthesizedExpression':
             return executeParenthesizedExpression(context, state);
+        case 'ArrayLiteral':
+            return executeArrayLiteral(context, state);
+        case 'ObjectLiteral':
+            return executeObjectLiteral(context, state);
         case 'BinaryExpression':
             return executeBinaryExpression(context, state);
         case 'UnaryExpression':
@@ -660,8 +939,6 @@ export function execute(context: Context, state: State) {
             return executePropAccess(context, state);
         case 'ElementAccess':
             return executeElementAccess(context, state);
-        case 'ExpressionStatement':
-            return executeExpressionStatement(context, state);
         case 'Call':
             return executeCall(context, state);
         case 'IfStatement':
@@ -674,5 +951,13 @@ export function execute(context: Context, state: State) {
             return executeFunctionDeclaration(context, state);
         case 'ReturnStatement':
             return executeReturnStatement(context, state);
+        case 'IdentifierAssignment':
+            return executeIdentifierAssignment(context, state);
+        case 'PropAccessAssignment':
+            return executePropAccessAssignment(context, state);
+        case 'ElementAccessAssignment':
+            return executeElementAccessAssignment(context, state);
+        case 'ExpressionStatement':
+            return executeExpressionStatement(context, state);
     }
 }
