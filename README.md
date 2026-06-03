@@ -2,7 +2,7 @@
 
 A custom programming language interpreter with step-by-step execution visualization, built from scratch in TypeScript and React.
 
-> 🚧 **In progress** — Tokenizer, AST node types and Parser complete. Interpreter and beyond coming next.
+> 🚧 **In progress** — Tokenizer, Parser, and Interpreter core complete. Visualizer UI coming next.
 
 ---
 
@@ -17,14 +17,14 @@ Source code (string)
       ↓
   Parser          → builds an Abstract Syntax Tree (AST) from tokens
       ↓
-  Interpreter     → walks the AST, executes the program step by step       [in progress]
+  Interpreter     → walks the AST step by step via an explicit execution stack
       ↓
-  Visualizer UI   → React interface to inspect each execution step          [upcoming]
+  Visualizer UI   → React interface to inspect each execution step             [upcoming]
 ```
 
 ---
 
-## Language features (planned)
+## Language features
 
 ```
 fn fib(n) {
@@ -82,13 +82,15 @@ floodfill(M, 2, 2, 25);
 print(M);
 ```
 
-Supports: variables, functions, closures, recursion, conditionals, loops, arrays, null.
+Supports: variables, functions, closures, recursion, conditionals, loops, arrays, objects, null.
+
+Built-in functions: `print`, `len`, `push`, `pop`, `del`.
 
 ---
 
 ## Tech stack
 
-- **TypeScript** — strict typing throughout; discriminated union types for the token system
+- **TypeScript** — strict typing throughout; discriminated union types for both the token system and AST nodes
 - **React** — step-by-step execution visualizer (upcoming)
 
 No parser generator libraries (e.g. ANTLR, PEG.js). Everything is hand-written.
@@ -105,35 +107,33 @@ Converts raw source code into a typed token array. Each token carries:
 - `value` — the runtime value for identifiers, strings, and numbers
 - `location` — `{ start, end }` with `line`, `column`, `index` for each position
 
-Handles: keywords, identifiers, number literals (including decimals), string literals, one/two-character symbols, whitespace, newlines, and unexpected character errors.
-
 ### ✅ TokenManager
 
-A cursor interface that Parser uses to consume the token array safely. Exposes two operations:
+A cursor interface for Parser to consume the token array safely:
 
-- **`peek()`** — returns the current token without advancing. Parser calls this to decide which grammar rule to apply next.
-- **`eat(expectedType)`** — validates that the current token matches the expected type, advances the cursor, and returns the token. Throws a descriptive syntax error on mismatch (e.g. `Expected '(' but got 'identifier'`).
-
-`eat()` accepts either a single type or an array of types — useful when the Parser can accept multiple valid tokens at a given position. Unlike some implementations that make the expected type optional, requiring it explicitly here prevents silent failures and makes grammar expectations visible at every call site.
-
-### ✅ AST node types
+- **`peek()`** — returns the current token without advancing
+- **`eat(expectedType)`** — validates type, advances, returns the token. Required expected type (non-optional) makes every call site explicitly declare what it expects, producing clear syntax errors on mismatch.
 
 ### ✅ Parser
 
-Transforms the token array into an AST using recursive descent parsing. Each grammar rule maps to a dedicated method; methods call each other recursively to handle nested structures.
+Full recursive descent parser with operator precedence chain:
 
-**Complete:**
+```
+expression → or → and → equality → relational → additive → multiplicative → unary → access/call → atom
+```
 
-- Lookahead functions — `isPrimitiveLookahead`, `isAtomLookahead`, `isExpressionLookahead`, `isStatementLookahead`, and per-statement variants
-- `parse()`, `parseBlock()`, `parseStatement()` — entry point and dispatch
-- Full expression chain with correct operator precedence (multiplicative → additive → relational → equality → and → or)
-- `parseUnaryExpression()` — recursive to handle `!!true`, `--x`
-- `parseAccessOrCallExpression()` — left-to-right chaining of `.`, `[]`, `()` via iterative wrapping
-- `parsePrimitive()`, `parseAtom()`, `parseParenthesizedExpression()`, `parseArrayLiteral()`, `parseObjectLiteral()`
-- `parseReturnStatement()`, `parseAssignmentOrExpressionStatement()`
-- `parseWhileLoop()`, `parseIfStatement()`, `parseFunctionDeclaration()`
+Handles: `if/else if/else`, `while`, `fn`, assignment, all expression types, object/array literals, closures.
 
-### 🔲 Interpreter
+### ✅ Interpreter
+
+Step-by-step execution engine using an **explicit execution stack** instead of JS recursion — enabling pause/resume at any point for the visualizer.
+
+Key components:
+
+- **Heap** — central storage for all runtime values; code passes `Pointer` strings, not values directly
+- **LexicalEnvironment** — scope chain with `get()` (traverse up to find), `set()` (declare in local scope), and `update()` (traverse up to find and mutate the owning scope — correct closure assignment behavior)
+- **CallStack** — tracks execution frames for UI display
+- **Context system** — each AST node type has a corresponding Context with a `phase` field that bookmarks progress across steps (e.g. `BinaryExpressionContext`: `init → lhscomputed → rhscomputed`)
 
 ### 🔲 Visualizer UI
 
@@ -141,15 +141,19 @@ Transforms the token array into an AST using recursive descent parsing. Each gra
 
 ## Design decisions
 
-**Discriminated union types for tokens** — each token variant is its own interface (`KeywordToken`, `IdentifierToken`, `NumberToken`, ...) unified under a `Token` union type. TypeScript narrows correctly at every check, so accessing `.value` on a `NumberToken` is type-safe without casting.
+**Discriminated union types for tokens and AST nodes** — each variant is its own interface unified under a union type. TypeScript narrows correctly at every check point without casting.
 
-**String literal types over enums** — token types are the actual characters and keywords (`'+'`, `'if'`, `'identifier'`) rather than enum members (`PLUS`, `IF`, `IDENTIFIER`). This removes a mapping layer and makes the token system self-documenting.
+**String literal types over enums** — token types are the actual characters (`'+'`, `'if'`) rather than enum members (`PLUS`, `IF`). Removes a mapping layer and makes the system self-documenting.
 
-**Incrementer class** — position tracking (line, column, index) is extracted into its own class. `snapshot()` returns a shallow copy of the current position so that token locations are not mutated as the cursor advances.
+**Incrementer class** — position tracking extracted into its own class. `snapshot()` returns a shallow copy so token locations are not mutated as the cursor advances.
 
-**Required expected type in `eat()`** — making the expected type non-optional means every call site explicitly declares what token it expects. This makes grammar rules readable in code and produces clear error messages when source code doesn't match.
+**Required expected type in `eat()`** — non-optional makes grammar rules readable at every call site and produces clear error messages.
 
-**Operator precedence via method layering** — instead of a precedence table or Pratt parser, each operator group has its own method that calls the next-higher-precedence method first. This makes the grammar explicit and readable: `parseAdditiveExpression` calls `parseMultiplicativeExpression`, which calls `parseUnaryExpression`, and so on.
+**Explicit execution stack over JS recursion** — `executionStack: Context[]` replaces the JS call stack, making it possible to pause execution at any step and resume later. Impossible with standard recursive tree traversal.
+
+**`update()` vs `set()` for variable assignment** — `update()` traverses the scope chain upward to find and mutate the scope that owns the variable (correct closure behavior). `set()` always writes to the current local scope (used for parameter binding and function declarations). Without this distinction, assignments inside nested functions would silently shadow outer variables instead of updating them.
+
+**Short-circuit evaluation** — `&&` and `||` skip evaluating the right side when the result is already determined by the left side, matching standard language semantics.
 
 ---
 

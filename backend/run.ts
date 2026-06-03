@@ -1,7 +1,7 @@
 import type { ASTNodeId, Block } from '../frontend/ast';
 import type { Accumulator, Context } from './context';
 import { execute, initialContext } from './execution';
-import { CallStack, Heap, LexicalEnvironment } from './memory';
+import { CallStack, Heap, LexicalEnvironment, Pointer } from './memory';
 
 interface Config {
     heap: Heap;
@@ -21,8 +21,23 @@ export function executor(program: Block): Executor {
     const heap = new Heap();
     const callStack = new CallStack();
     const buildinEnvironment = new LexicalEnvironment();
-    const globalEnvironment = new LexicalEnvironment();
+    // 'Dirty' print builtin function
+    const printPointer = heap.set({
+        type: 'builtinfunction',
+        impl: (args: Pointer[]) => {
+            const strings: string[] = [];
 
+            for (const argumentPointer of args) {
+                strings.push(JSON.stringify(heap.get(argumentPointer)));
+            }
+
+            printed.push(strings.join(''));
+
+            return heap.set({ type: 'null' });
+        },
+    });
+    const globalEnvironment = new LexicalEnvironment(buildinEnvironment);
+    globalEnvironment.set('print', printPointer);
     callStack.push('global', program, globalEnvironment);
 
     return new Executor({ program, heap, callStack, printed });
@@ -58,7 +73,8 @@ class Executor {
         while (this.executionStack.length > 0) {
             const currentContext = this.executionStack[this.executionStack.length - 1];
 
-            if (this.breakpoints.has(currentContext.node.id)) {
+            if (this.breakpoints.has(currentContext.node.id) && !currentContext.breakpoint) {
+                currentContext.breakpoint = true;
                 return this.state();
             }
 
@@ -75,7 +91,9 @@ class Executor {
     }
 
     // Lưu trạng thái hiện tại bao gồm Heap/Stack snapshot
-    private state() {
-        return this.printed;
+    private state(): string[] {
+        const printed = [...this.printed];
+        this.printed.length = 0;
+        return printed;
     }
 }

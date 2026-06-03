@@ -149,7 +149,7 @@ function executePrimitive(context: PrimitiveContext, state: State) {
 
 // Execute Expression được bọc trong (): (x + 1) * 2
 // Dấu ngoặc chỉ dùng để nhóm, không tạo ra value mới - chỉ cần execute expression bên trong
-// init: Push inner expression vào executionStack
+// init: push inner expression vào executionStack
 // done: accumulator.value đã có kết quả → pop
 function executeParenthesizedExpression(context: ParenthesizedExpressionContext, state: State) {
     if (context.phase === 'init') {
@@ -213,7 +213,6 @@ function executeArrayLiteral(context: ArrayLiteralContext, state: State) {
 //                Nếu còn cặp tiếp theo → lặp lại logic xử lý Key tương tự phase init
 //                Nếu đã hết → chuyển sang done
 // done:          Tạo ObjectValue trên Heap từ context.pairs, ghi Pointer vào accumulator.value → pop
-// Execute Object Literal
 function executeObjectLiteral(context: ObjectLiteralContext, state: State) {
     if (context.phase === 'init') {
         if (context.node.pairs.length > 0) {
@@ -291,7 +290,7 @@ function executeObjectLiteral(context: ObjectLiteralContext, state: State) {
 }
 
 // Execute Binary Expression
-// init:        Push left expression vào executionStack
+// init:        push left expression vào executionStack
 // lhscomputed: Lưu accumulator.value vào context.left, push right expression
 //              Short-circuit: && với left=false hoặc || với left=true → pop ngay, không tính right
 // rhscomputed: Có đủ left + accumulator.value (right) → apply operator → ghi kết quả → pop
@@ -411,7 +410,7 @@ function executeBinaryExpression(context: BinaryExpressionContext, state: State)
 }
 
 // Execute Unary Expression: !true, -x, +1
-// init:        Push argument expression vào executionStack
+// init:        push argument expression vào executionStack
 // argcomputed: Apply operator lên value → ghi kết quả vào accumulator.value → pop
 function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
     if (context.phase === 'init') {
@@ -446,7 +445,7 @@ function executeUnaryExpression(context: UnaryExpressionContext, state: State) {
 }
 
 // Execute Property Access: obj.property
-// init:           Push target expression vào executionStack
+// init:           push target expression vào executionStack
 // targetcomputed: target xong → check phải là object → lookup property name
 //                 Property không tồn tại → trả về null thay vì throw
 function executePropAccess(context: PropAccessContext, state: State) {
@@ -474,10 +473,10 @@ function executePropAccess(context: PropAccessContext, state: State) {
 }
 
 // Execute Element Access: arr[0], matrix[r][c], obj["key"]
-// init:           Push target vào executionStack
+// init:           push target vào executionStack
 // targetcomputed: Lưu accumulator.value vào context.target, push index expression
 // indexcomputed:  target + index → lookup element
-//                 array: index phải là number, out of bounds → null
+//                 array: index phải là number, out of bounds → throw
 //                 object: index là primitive, coerce sang string làm key
 function executeElementAccess(context: ElementAccessContext, state: State) {
     if (context.phase === 'init') {
@@ -768,7 +767,7 @@ function executeReturnStatement(context: ReturnStatementContext, state: State) {
 }
 
 // Execute Identifier Assignment: x = 42
-// init:        Push right expression vào executionStack để tính value
+// init:        push right expression vào executionStack để tính value
 // rhscomputed: accumulator.value là kết quả right
 //              Cast left sang Identifier để lấy tên biến
 //              Set Pointer vào LexicalEnvironment của frame hiện tại → pop
@@ -798,9 +797,9 @@ function executeIdentifierAssignment(context: IdentifierAssignmentContext, state
 }
 
 // Execute Property Access Assignment: obj.name = value
-// init:           Push right expression vào executionStack
+// init:           push right expression vào executionStack
 // rhscomputed:    Lưu kết quả vế phải vào context.right để tránh bị ghi đè
-//                 Push target expression (phần bên trái dấu .) vào stack
+//                 push target expression (phần bên trái dấu .) vào stack
 // targetcomputed: Sau khi có Pointer của đối tượng đích, kiểm tra xem nó có phải là 'object' không
 //                 Nếu đúng, cập nhật thuộc tính tương ứng trong Heap bằng Pointer context.right đã lưu
 function executePropAccessAssignment(context: PropAccessAssignmentContext, state: State) {
@@ -836,12 +835,12 @@ function executePropAccessAssignment(context: PropAccessAssignmentContext, state
 }
 
 // Execute Element Access Assignment: arr[0] = value, obj["key"] = value
-// init:           Push right expression
+// init:           push right expression
 // rhscomputed:    Lưu kết quả vế phải vào context.right, sau đó push target expression
 // targetcomputed: Lưu Pointer của target vào context.target, sau đó push index expression
 // indexcomputed:  Có đủ 3 thành phần: target, index và giá trị mới (right)
-//                 Array: index phải là number và trong bounds rồi cập nhật
-//                 Object: Ép kiểu index sang string để làm key rồi cập nhật property trong Heap
+//                 array: index phải là number và trong bounds rồi cập nhật
+//                 object: Ép kiểu index sang string để làm key rồi cập nhật property trong Heap
 function executeElementAccessAssignment(context: ElementAccessAssignmentContext, state: State) {
     if (context.phase === 'init') {
         state.executionStack.push(initialContext(context.node.right));

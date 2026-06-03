@@ -3,12 +3,19 @@ import { Parser } from './frontend/parser';
 import { Tokenizer, TokenManager } from './frontend/tokenizer';
 
 const program = `
-"hello";
-
+print("hello");
+print(123.12);
 `;
 
 const tokens = new TokenManager(new Tokenizer(program).tokenize());
 const parser = new Parser(tokens);
 const ast = parser.parse();
+console.log(JSON.stringify(ast));
 const execute = executor(ast);
-execute.advance();
+
+execute.addBreakpoint('3');
+execute.addBreakpoint('7');
+
+console.log(execute.advance());
+console.log(execute.advance());
+console.log(execute.advance());
