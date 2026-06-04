@@ -1,6 +1,6 @@
 // Module để xử lý việc hiển thị dữ liệu
 // Nhận vào các runtime value trên Heap, chuyển thành string để hiển thị lên console
-import type { ArrayValue, Heap, ObjectValue, PrimitiveValue, RuntimeValue } from './memory';
+import { type ArrayValue, Heap, type ObjectValue, type PrimitiveValue, type RuntimeValue } from './memory';
 
 function printPrimitive(value: PrimitiveValue): string {
     if (value.type === 'null') {
@@ -16,8 +16,8 @@ function printPrimitive(value: PrimitiveValue): string {
 
 // Chuyển Object value thành string: { "key1": value1, "key2": value2 }
 // Object trên Heap chỉ lưu Pointer cho mỗi property - không lưu value trực tiếp
-// Phải dùng heap.get(pointer) để lấy value thực, rồi gọi đệ quy printAny
-// để handle trường hợp property là object/array lồng nhau
+// Phải dùng heap.get(pointer) để lấy value thực
+// Gọi đệ quy printAny để handle trường hợp property là object/array lồng nhau
 function printObject(heap: Heap, value: ObjectValue): string {
     const strings: string[] = [];
 
