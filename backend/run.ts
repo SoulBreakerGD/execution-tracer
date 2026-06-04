@@ -62,7 +62,7 @@ export function executor(program: Block): Executor {
         },
     });
 
-    // Push builtin function:
+    // Push builtin function
     const pushPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {

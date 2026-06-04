@@ -640,7 +640,7 @@ function executeIfStatement(context: IfStatementContext, state: State) {
         } else {
             state.executionStack.pop();
 
-            if (context.node.elseIf.length > 0) {
+            if (context.node.elseIfs.length > 0) {
                 state.executionStack.push(initialElseIfContext(context.node, 0));
             } else if (context.node.else) {
                 state.executionStack.push(initialContext(context.node.else));
@@ -656,8 +656,8 @@ function executeIfStatement(context: IfStatementContext, state: State) {
     }
 }
 
-// Execute ElseIf Branch - dùng index để biết đang xử lý elseIf[index]
-// init:         push condition của elseIf[index] vào executionStack
+// Execute ElseIf Branch - dùng index để biết đang xử lý elseIfs[index]
+// init:         push condition của elseIfs[index] vào executionStack
 // condcomputed: condition xong →
 //               isTruthy → push body Block, chuyển phase done
 //               còn elseIf tiếp → pop, push ElseIfContext với index + 1 (đệ quy qua chain)
@@ -666,7 +666,7 @@ function executeIfStatement(context: IfStatementContext, state: State) {
 // done:         pop
 function executeElseIf(context: ElseIfContext, state: State) {
     if (context.phase === 'init') {
-        state.executionStack.push(initialContext(context.node.elseIf[context.index].condition));
+        state.executionStack.push(initialContext(context.node.elseIfs[context.index].condition));
         context.phase = 'condcomputed';
 
         return;
@@ -674,12 +674,12 @@ function executeElseIf(context: ElseIfContext, state: State) {
 
     if (context.phase === 'condcomputed') {
         if (isTruthy(state.heap.get(state.accumulator.value))) {
-            state.executionStack.push(initialContext(context.node.elseIf[context.index].body));
+            state.executionStack.push(initialContext(context.node.elseIfs[context.index].body));
             context.phase = 'done';
         } else {
             state.executionStack.pop();
 
-            if (context.index + 1 < context.node.elseIf.length) {
+            if (context.index + 1 < context.node.elseIfs.length) {
                 state.executionStack.push(initialElseIfContext(context.node, context.index + 1));
             } else if (context.node.else) {
                 state.executionStack.push(initialContext(context.node.else));
@@ -727,12 +727,14 @@ function executeWhileLoop(context: WhileLoopContext, state: State) {
 // Closure hoạt động vì khi hàm được gọi sau này, nó dùng parentEnvironment để lookup biến từ scope nơi nó được định nghĩa, không phải nơi nó được gọi
 // Set fnPointer vào LexicalEnvironment theo tên hàm → pop
 function executeFunctionDeclaration(context: FunctionDeclarationContext, state: State) {
+    // Tạo một vùng nhớ trên Heap để lưu trữ thông tin hàm
     const fnPointer = state.heap.set({
         type: 'function',
-        node: context.node,
-        parentEnvironment: state.callStack.peek().environment,
+        node: context.node, // Lưu lại AST node để biết code bên trong hàm có gì
+        parentEnvironment: state.callStack.peek().environment, // Chụp lại scope hiện tại (Lexical Scoping)
     });
 
+    // Đưa tên hàm vào scope hiện tại để các câu lệnh sau có thể gọi được
     state.callStack.peek().environment.set(context.node.name, fnPointer);
     state.executionStack.pop();
 

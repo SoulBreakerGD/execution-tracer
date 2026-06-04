@@ -129,7 +129,7 @@ export interface IfStatement extends BaseNode {
     type: 'IfStatement';
     condition: Expression;
     body: Block;
-    elseIf: ElseIf[]; // danh sách các else if branch
+    elseIfs: ElseIf[]; // danh sách các else if branch
     else?: Block; // optional - không phải lúc nào cũng có else
 }
 

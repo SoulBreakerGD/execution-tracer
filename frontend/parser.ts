@@ -645,7 +645,7 @@ export class Parser {
             type: 'IfStatement',
             condition: condition,
             body: body,
-            elseIf: elseIfs,
+            elseIfs: elseIfs,
             else: elseBranch,
         };
     }
