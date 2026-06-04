@@ -1,8 +1,9 @@
 import type { ASTNodeId, Block } from '../frontend/ast';
-import { printAny } from './buildin';
+import { printAny } from './builtin';
 import type { Accumulator, Context } from './context';
+import { type DiagnosticFrame, heapSnapshot, type HeapSnapshot, stackDiagnostic } from './diagnostics';
 import { execute, initialContext } from './execution';
-import { CallStack, Heap, LexicalEnvironment, Pointer } from './memory';
+import { CallStack, Heap, LexicalEnvironment, type Pointer } from './memory';
 
 interface Config {
     heap: Heap;
@@ -14,6 +15,8 @@ interface Config {
 interface ExecutionState {
     printed: string[];
     finished: boolean;
+    callStack: DiagnosticFrame[];
+    heap: HeapSnapshot;
 }
 
 // Dùng để initialize các thuộc tính trong Executor
@@ -22,9 +25,9 @@ export function executor(program: Block): Executor {
     const printed: string[] = [];
     const heap = new Heap();
     const callStack = new CallStack();
-    const buildinEnvironment = new LexicalEnvironment();
+    const builtinEnvironment = new LexicalEnvironment();
 
-    // Print builtin function
+    // Print builtin function: Chuyển đổi các RuntimeValue thành chuỗi và lưu vào buffer 'printed'
     const printPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -36,11 +39,12 @@ export function executor(program: Block): Executor {
 
             printed.push(strings.join(' '));
 
+            // Hàm print trong ngôn ngữ này không trả về giá trị (null)
             return heap.set({ type: 'null' });
         },
     });
 
-    // Len (length) buildin function
+    // Len (length) builtin function
     const lenPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -53,11 +57,12 @@ export function executor(program: Block): Executor {
                 throw new Error(`Expected array, but got ${array.type}`);
             }
 
+            // Trả về một RuntimeValue kiểu 'number' chứa độ dài mảng
             return heap.set({ type: 'number', value: array.elements.length });
         },
     });
 
-    // Push buildin function
+    // Push builtin function:
     const pushPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -70,12 +75,13 @@ export function executor(program: Block): Executor {
                 throw new Error(`Expected array, but got ${array.type}`);
             }
 
+            // Thêm Pointer của phần tử mới vào mảng Pointer của ArrayValue
             array.elements.push(args[1]);
-            return args[1];
+            return args[1]; // Trả về chính phần tử vừa push
         },
     });
 
-    // Pop buildin function
+    // Pop builtin function
     const popPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -88,12 +94,12 @@ export function executor(program: Block): Executor {
                 throw new Error(`Expected array, but got ${array.type}`);
             }
 
-            // Nếu array rỗng thì trả về Pointer đến null
-            return array.elements.pop() || heap.set({ type: 'null' });
+            // Lấy Pointer cuối cùng ra khỏi mảng, nếu rỗng thì trả về Pointer đến 'null'
+            return array.elements.pop() ?? heap.set({ type: 'null' });
         },
     });
 
-    // Del (delete) buildin function
+    // Del (delete) builtin function
     const delPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -111,18 +117,19 @@ export function executor(program: Block): Executor {
                 throw new Error(`Expected string, but got ${key.type}`);
             }
 
+            // Xóa mapping của key trong object properties trên Heap
             delete object.properties[key.value];
             return heap.set({ type: 'null' });
         },
     });
 
-    buildinEnvironment.set('print', printPointer);
-    buildinEnvironment.set('len', lenPointer);
-    buildinEnvironment.set('push', pushPointer);
-    buildinEnvironment.set('pop', popPointer);
-    buildinEnvironment.set('del', delPointer);
+    builtinEnvironment.set('print', printPointer);
+    builtinEnvironment.set('len', lenPointer);
+    builtinEnvironment.set('push', pushPointer);
+    builtinEnvironment.set('pop', popPointer);
+    builtinEnvironment.set('del', delPointer);
 
-    const globalEnvironment = new LexicalEnvironment(buildinEnvironment);
+    const globalEnvironment = new LexicalEnvironment(builtinEnvironment);
     callStack.push('global', program, globalEnvironment);
 
     return new Executor({ program, heap, callStack, printed });
@@ -176,9 +183,14 @@ class Executor {
     }
 
     // Lưu trạng thái hiện tại bao gồm Heap/Stack snapshot
-    private state(): string[] {
+    private state(): ExecutionState {
         const printed = [...this.printed];
-        this.printed.length = 0;
-        return printed;
+        this.printed.length = 0; // Clear buffer sau mỗi advance()
+        return {
+            printed,
+            finished: this.executionStack.length === 0,
+            callStack: stackDiagnostic(this.callStack),
+            heap: heapSnapshot(this.heap),
+        };
     }
 }
