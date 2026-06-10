@@ -8,12 +8,12 @@ import { CallStack, Heap, LexicalEnvironment, type Pointer } from './memory';
 interface Config {
     heap: Heap;
     callStack: CallStack;
-    printed: string[]; // Output khi gọi hàm print()
+    output: string[]; // Output khi gọi hàm print()
     program: Block;
 }
 
 interface ExecutionState {
-    printed: string[];
+    output: string[];
     finished: boolean;
     callStack: DiagnosticFrame[];
     heap: HeapSnapshot;
@@ -22,12 +22,12 @@ interface ExecutionState {
 // Dùng để initialize các thuộc tính trong Executor
 // Đầu vào là toàn bộ program, một Block AST
 export function executor(program: Block): Executor {
-    const printed: string[] = [];
+    const output: string[] = [];
     const heap = new Heap();
     const callStack = new CallStack();
     const builtinEnvironment = new LexicalEnvironment();
 
-    // Print builtin function: Chuyển đổi các RuntimeValue thành chuỗi và lưu vào buffer 'printed'
+    // Print builtin function: Chuyển đổi các RuntimeValue thành chuỗi và lưu vào buffer 'output'
     const printPointer = heap.set({
         type: 'builtinfunction',
         impl: (args: Pointer[]) => {
@@ -37,7 +37,7 @@ export function executor(program: Block): Executor {
                 strings.push(printAny(heap, heap.get(argumentPointer)));
             }
 
-            printed.push(strings.join(' '));
+            output.push(strings.join(' '));
 
             // Hàm print trong ngôn ngữ này không trả về giá trị (null)
             return heap.set({ type: 'null' });
@@ -132,14 +132,14 @@ export function executor(program: Block): Executor {
     const globalEnvironment = new LexicalEnvironment(builtinEnvironment);
     callStack.push('global', program, globalEnvironment);
 
-    return new Executor({ program, heap, callStack, printed });
+    return new Executor({ program, heap, callStack, output });
 }
 
 // Một state machine tự quản lý executionStack để hỗ trợ program breakpoints hoặc pause execution vì không thể làm với đệ quy JS thông thường
 class Executor {
     private readonly heap: Heap;
     private readonly callStack: CallStack;
-    private readonly printed: string[];
+    private readonly output: string[];
     private readonly executionStack: Context[]; // Giả lập recursive stack để quản lý thay vì recursive traverse AST
     private readonly breakpoints: Set<ASTNodeId> = new Set();
     private readonly accumulator: Accumulator;
@@ -147,7 +147,7 @@ class Executor {
     constructor(config: Config) {
         this.heap = config.heap;
         this.callStack = config.callStack;
-        this.printed = config.printed;
+        this.output = config.output;
         this.executionStack = [initialContext(config.program)];
         this.accumulator = { value: this.heap.set({ type: 'null' }), isReturn: false };
     }
@@ -184,10 +184,10 @@ class Executor {
 
     // Lưu trạng thái hiện tại bao gồm Heap/Stack snapshot
     private state(): ExecutionState {
-        const printed = [...this.printed];
-        this.printed.length = 0; // Clear buffer sau mỗi advance()
+        const output = [...this.output];
+        this.output.length = 0; // Clear buffer sau mỗi advance()
         return {
-            printed,
+            output,
             finished: this.executionStack.length === 0,
             callStack: stackDiagnostic(this.callStack),
             heap: heapSnapshot(this.heap),

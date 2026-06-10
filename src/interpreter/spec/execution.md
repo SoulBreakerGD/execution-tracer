@@ -13,7 +13,7 @@ Block (root AST node)
     ↓ executor(ast)
 Executor (đã setup Heap, Env, CallStack, executionStack)
     ↓ executor.advance()
-ExecutionState { printed, finished, stack, heap }
+ExecutionState { output, finished, stack, heap }
 ```
 
 ---
@@ -163,10 +163,10 @@ executionStack rỗng → finished = true
 
 ```typescript
 private state(): ExecutionState {
-    const printed = [...this.printed]
-    this.printed.length = 0  // clear buffer sau mỗi advance()
+    const output = [...this.output]
+    this.output.length = 0  // clear buffer sau mỗi advance()
     return {
-        printed,
+        output,
         finished: executionStack.length === 0,
         stack: stackDiagnostic(callStack),   // frames hiện tại
         heap:  heapSnapshot(heap),           // tất cả values trên Heap

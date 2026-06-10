@@ -638,6 +638,7 @@ function executeIfStatement(context: IfStatementContext, state: State) {
             state.executionStack.push(initialContext(context.node.body));
             context.phase = 'done';
         } else {
+            // pop() body block
             state.executionStack.pop();
 
             if (context.node.elseIfs.length > 0) {
