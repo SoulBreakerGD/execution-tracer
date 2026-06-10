@@ -136,7 +136,7 @@ export function executor(program: Block): Executor {
 }
 
 // Một state machine tự quản lý executionStack để hỗ trợ program breakpoints hoặc pause execution vì không thể làm với đệ quy JS thông thường
-class Executor {
+export class Executor {
     private readonly heap: Heap;
     private readonly callStack: CallStack;
     private readonly output: string[];
@@ -156,7 +156,7 @@ class Executor {
         this.breakpoints.add(id);
     }
 
-    clearBreakpoint() {
+    clearBreakpoints() {
         this.breakpoints.clear();
     }
 
