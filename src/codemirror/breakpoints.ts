@@ -23,8 +23,10 @@ export const breakpointState = StateField.define({
     create() {
         return RangeSet.empty;
     },
+
     update(set, transaction) {
-        set = set.map(transaction.changes); // if we don't have this, then breakpoints don't get shifted down
+        set = set.map(transaction.changes); // Dòng này để các breakpoints có thể được dịch chuyển xuống khi thêm/xóa dòng code
+
         for (let e of transaction.effects) {
             if (e.is(breakpointEffect)) {
                 if (e.value.on) {
@@ -40,6 +42,7 @@ export const breakpointState = StateField.define({
 
 export const breakpointGutter = [
     breakpointState,
+
     gutter({
         markers: (view) => view.state.field(breakpointState),
         initialSpacer: () => breakpointMarker,

@@ -6,6 +6,8 @@ import { Tokenizer, TokenManager } from './interpreter/frontend/tokenizer';
 import { Parser } from './interpreter/frontend/parser';
 import { Executor, executor } from './interpreter/backend/run';
 import type { ASTNode, ASTNodeId, Block } from './interpreter/frontend/ast';
+import type { DiagnosticFrame, HeapSnapshot } from './interpreter/backend/diagnostics';
+import { Stack } from './Stack';
 
 interface BaseState {
     code: string;
@@ -22,6 +24,8 @@ interface IdleState extends BaseState {
 interface ExecutingState extends BaseState {
     type: 'executing';
     program: Block; // Giữ lại AST để map breakpoints mỗi khi người dùng thêm/xóa
+    callStack: DiagnosticFrame[];
+    heap: HeapSnapshot;
 }
 
 // CodeMirror chỉ biết line numbers, nhưng executor cần ASTNodeId để set breakpoint
@@ -113,6 +117,8 @@ export function App() {
                     breakpoints: state.breakpoints,
                     output: [...state.output, ...result.output],
                     program: ast,
+                    callStack: result.callStack,
+                    heap: result.heap,
                 });
             }
         }
@@ -137,6 +143,8 @@ export function App() {
                     breakpoints: state.breakpoints,
                     output: [...state.output, ...result.output],
                     program: state.program,
+                    callStack: result.callStack,
+                    heap: result.heap,
                 });
             }
         }
@@ -176,6 +184,12 @@ export function App() {
                 onClear={() => {
                     setState((state) => ({ ...state, output: [] }));
                 }}
+            />
+            <Stack
+                callStack={
+                    state.type === 'executing' ? state.callStack.map((frame) => ({ ...frame, expanded: {} })) : []
+                }
+                heap={state.type === 'executing' ? state.heap : {}}
             />
         </div>
     );
